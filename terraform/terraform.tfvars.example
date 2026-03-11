@@ -1,0 +1,28 @@
+project_name = "ops"
+environment  = "dev"
+aws_region   = "ap-northeast-1"
+
+# 通知先メールアドレス（必須）
+alert_email = "your-email@example.com"
+
+# 監視対象 EC2 インスタンス ID
+# interview-challenge をデプロイした際の EC2 ID を記載する
+ec2_instance_ids = [
+  # "i-0xxxxxxxxxxxxxxxxx",
+  # "i-0yyyyyyyyyyyyyyyyy",
+]
+
+# 監視対象 ALB の ARN サフィックス
+# AWS コンソール > EC2 > ロードバランサー > ARN の末尾部分
+# 例: app/interview-dev-alb/xxxxxxxxxxxxxxxx
+alb_arn_suffix = ""
+
+# 監視対象 RDS インスタンス識別子
+# 例: interview-dev-mysql
+rds_instance_identifier = ""
+
+# アラーム閾値（任意・デフォルト値から変更する場合のみ記載）
+# ec2_cpu_threshold        = 80
+# rds_cpu_threshold        = 80
+# rds_storage_threshold_gb = 5
+# alb_5xx_threshold        = 10
