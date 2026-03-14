@@ -17,16 +17,16 @@
         <mxCell id="10" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;" value="AWS 監視・アラートアーキテクチャ" vertex="1">
           <mxGeometry height="40" width="560" x="430" y="20" as="geometry" />
         </mxCell>
-        <mxCell id="20" parent="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;strokeColor=#232F3E;fillColor=#F7F7F7;verticalLabelPosition=top;verticalAlign=bottom;align=center;fontStyle=1;fontSize=14;" value="監視対象リソース" vertex="1">
+        <mxCell id="20" parent="1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;strokeColor=#AAB7B8;fillColor=none;verticalLabelPosition=top;verticalAlign=bottom;align=center;fontStyle=1;fontSize=14;" value="監視対象リソース" vertex="1">
           <mxGeometry height="560" width="690" x="60" y="90" as="geometry" />
         </mxCell>
-        <mxCell id="21" parent="1" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#ED7515;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=11;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" value="EC2-1" vertex="1">
+        <mxCell id="21" parent="1" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#ED7100;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=11;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" value="EC2-1" vertex="1">
           <mxGeometry height="64" width="64" x="150" y="190" as="geometry" />
         </mxCell>
         <mxCell id="22" parent="1" style="text;html=1;align=center;fontSize=11;strokeColor=none;fillColor=none;" value="Web Server 1&#xa;(t3.micro)" vertex="1">
           <mxGeometry height="34" width="124" x="120" y="260" as="geometry" />
         </mxCell>
-        <mxCell id="23" parent="1" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#ED7515;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=11;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" value="EC2-2" vertex="1">
+        <mxCell id="23" parent="1" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#ED7100;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=11;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" value="EC2-2" vertex="1">
           <mxGeometry height="64" width="64" x="150" y="340" as="geometry" />
         </mxCell>
         <mxCell id="24" parent="1" style="text;html=1;align=center;fontSize=11;strokeColor=none;fillColor=none;" value="Web Server 2&#xa;(t3.micro)" vertex="1">
