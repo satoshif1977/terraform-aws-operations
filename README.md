@@ -1,5 +1,9 @@
 # terraform-aws-operations
 
+![Terraform CI](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml/badge.svg)
+![Terraform](https://img.shields.io/badge/Terraform-623CE4?style=flat&logo=terraform&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazon-aws&logoColor=white)
+
 AWS インフラの監視・アラート設定と障害対応 Runbook を Terraform でコード化した運用自動化 PoC。
 CloudWatch + SNS による異常検知から、障害一次対応手順書（Runbook）まで、副業での AWS 運用補助業務を想定した実践的な構成です。
 
