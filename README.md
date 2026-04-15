@@ -34,6 +34,9 @@ CloudWatch + SNS による異常検知から、障害一次対応手順書（Run
 | ALB | 5xx エラー数 | 10件/分 | `alb_5xx_threshold` |
 | RDS | CPU 使用率 | 80%（5分間） | `rds_cpu_threshold` |
 | RDS | 空きストレージ | 5GB 以下 | `rds_storage_threshold_gb` |
+| **Lambda** | **エラー数** | **1件以上/5分** | `lambda_error_threshold` |
+| **Lambda** | **実行時間** | **10秒以上** | `lambda_duration_threshold_ms` |
+| **Lambda** | **スロットリング** | **1件以上/5分** | `lambda_throttle_threshold` |
 
 閾値はすべて `terraform.tfvars` で上書き可能です。
 

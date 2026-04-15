@@ -137,7 +137,75 @@ resource "aws_cloudwatch_metric_alarm" "rds_storage" {
   alarm_actions = [aws_sns_topic.alert.arn]
 }
 
-# ── 5. CloudWatch ダッシュボード ───────────────────────────
+# ── 5. Lambda 監視 ────────────────────────────────────────
+# Lambda エラー数アラーム（エラー発生を即時検知）
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  for_each = toset(var.lambda_function_names)
+
+  alarm_name          = "${var.project_name}-${var.environment}-lambda-errors-${each.key}"
+  alarm_description   = "Lambda 関数 ${each.key} でエラーが発生（${var.lambda_error_threshold} 件以上/5分）"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300 # 5分
+  evaluation_periods  = 1
+  threshold           = var.lambda_error_threshold
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching" # 実行なし = 正常とみなす
+
+  dimensions = {
+    FunctionName = each.key
+  }
+
+  alarm_actions = [aws_sns_topic.alert.arn]
+  ok_actions    = [aws_sns_topic.alert.arn]
+}
+
+# Lambda 実行時間アラーム（タイムアウト予兆を検知）
+resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
+  for_each = toset(var.lambda_function_names)
+
+  alarm_name          = "${var.project_name}-${var.environment}-lambda-duration-${each.key}"
+  alarm_description   = "Lambda 関数 ${each.key} の実行時間が ${var.lambda_duration_threshold_ms}ms を超過（タイムアウト予兆）"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = var.lambda_duration_threshold_ms
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = each.key
+  }
+
+  alarm_actions = [aws_sns_topic.alert.arn]
+}
+
+# Lambda スロットリングアラーム（同時実行数の上限到達を検知）
+resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
+  for_each = toset(var.lambda_function_names)
+
+  alarm_name          = "${var.project_name}-${var.environment}-lambda-throttles-${each.key}"
+  alarm_description   = "Lambda 関数 ${each.key} でスロットリングが発生（同時実行数が上限に到達）"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Throttles"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = var.lambda_throttle_threshold
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = each.key
+  }
+
+  alarm_actions = [aws_sns_topic.alert.arn]
+}
+
+# ── 6. CloudWatch ダッシュボード ───────────────────────────
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-${var.environment}-dashboard"
 

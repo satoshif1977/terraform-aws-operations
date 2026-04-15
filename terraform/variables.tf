@@ -71,3 +71,29 @@ variable "alb_5xx_threshold" {
   type        = number
   default     = 10
 }
+
+# ── Lambda 監視対象 ───────────────────────────────────────
+variable "lambda_function_names" {
+  description = "監視対象の Lambda 関数名リスト"
+  type        = list(string)
+  default     = []
+}
+
+# ── Lambda アラーム閾値 ───────────────────────────────────
+variable "lambda_error_threshold" {
+  description = "Lambda エラー数アラーム閾値（5分間）"
+  type        = number
+  default     = 1
+}
+
+variable "lambda_duration_threshold_ms" {
+  description = "Lambda 実行時間アラーム閾値（ミリ秒）"
+  type        = number
+  default     = 10000 # 10秒
+}
+
+variable "lambda_throttle_threshold" {
+  description = "Lambda スロットリング数アラーム閾値（5分間）"
+  type        = number
+  default     = 1
+}
