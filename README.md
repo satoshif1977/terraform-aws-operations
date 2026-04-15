@@ -3,6 +3,9 @@
 ![Terraform CI](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml/badge.svg)
 ![Terraform](https://img.shields.io/badge/Terraform-623CE4?style=flat&logo=terraform&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazon-aws&logoColor=white)
+![Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-orange?logo=anthropic)
+![Claude Cowork](https://img.shields.io/badge/Daily%20Use-Claude%20Cowork-blueviolet?logo=anthropic)
+![Claude Skills](https://img.shields.io/badge/Custom-Skills%20Configured-green?logo=anthropic)
 
 AWS インフラの監視・アラート設定と障害対応 Runbook を Terraform でコード化した運用自動化 PoC。
 CloudWatch + SNS による異常検知から、障害一次対応手順書（Runbook）まで、副業での AWS 運用補助業務を想定した実践的な構成です。
@@ -166,6 +169,20 @@ terraform destroy
 - **「監視設定も IaC で管理できる」**: CloudWatch アラームを手動でポチポチではなく Terraform でコード化。環境の再現性・変更履歴の担保を説明できる
 - **「Runbook まで一体管理」**: アラームが鳴った後の対応手順書も Git で管理。インフラ担当が "作るだけ" でなく "運用まで考える" 姿勢を示せる
 - **「モジュール化で横展開できる」**: 別プロジェクト（terraform-3tier-webapp 等）の監視設定に同モジュールをそのまま適用可能
+
+---
+
+## AI 活用について
+
+本プロジェクトは以下の Anthropic ツールを活用して開発しています。
+
+| ツール | 用途 |
+|---|---|
+| **Claude Code** | インフラ設計・コード生成・デバッグ・コードレビュー。コミットまで一貫してサポート |
+| **Claude Cowork** | 技術調査・設計相談・ドキュメント作成を日常的に活用。AI との協働を業務フローに組み込んでいる |
+| **カスタム Skills** | Terraform / Python / AWS に特化した Skills を設定・継続的に更新。自分の技術スタックに最適化したワークフローを構築 |
+
+> AI を「使う」だけでなく、自分の業務・技術スタックに合わせて**設定・運用・改善し続ける**ことを意識しています。
 
 ---
 
