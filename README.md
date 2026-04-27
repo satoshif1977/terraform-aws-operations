@@ -8,7 +8,7 @@
 ![Claude Skills](https://img.shields.io/badge/Custom-Skills%20Configured-green?logo=anthropic)
 
 AWS インフラの監視・アラート設定と障害対応 Runbook を Terraform でコード化した運用自動化 PoC。
-CloudWatch + SNS による異常検知から、障害一次対応手順書（Runbook）まで、副業での AWS 運用補助業務を想定した実践的な構成です。
+CloudWatch + SNS による異常検知から、障害一次対応手順書（Runbook）まで、AWS 運用補助業務を想定した実践的な構成です。
 
 ---
 
@@ -167,7 +167,7 @@ terraform destroy
 
 ---
 
-## 副業・面談でのアピールポイント
+## 技術的な見どころ
 
 - **「監視設定も IaC で管理できる」**: CloudWatch アラームを手動でポチポチではなく Terraform でコード化。環境の再現性・変更履歴の担保を説明できる
 - **「Runbook まで一体管理」**: アラームが鳴った後の対応手順書も Git で管理。インフラ担当が "作るだけ" でなく "運用まで考える" 姿勢を示せる
