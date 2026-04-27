@@ -175,6 +175,21 @@ terraform destroy
 
 ---
 
+## 学習で気づいたこと・躓いたポイント
+
+### CloudWatch アラーム設計
+
+- **SNS Confirm subscription の忘れ**: `terraform apply` 後にメールが届いても「Confirm subscription」をクリックしないとアラームが届かない。自動化できない手動ステップのため、README への明記と apply 後の確認手順化が必須。
+- **`for_each` で複数 EC2 アラームを一括管理**: EC2 インスタンス ID のリストを変数化し `for_each` で回すと、インスタンス追加時に `variables.tf` の変更だけで対応できる。個別にリソースを書くより拡張性が高い。
+- **CloudWatch ダッシュボードの JSON 定義**: `dashboard_body` に JSON を直接書くと可読性が下がる。`jsonencode()` を使うと Terraform 変数を埋め込みつつ、構造を人間が読みやすい形で記述できる。
+
+### Terraform モジュール設計
+
+- **`monitoring/` と `iam/` の分割**: アラームモジュールに IAM を混在させると再利用しにくくなる。IAM ロールを独立したモジュールに切り出し、ARN を outputs で渡す設計にするとモジュールの独立性が高まる。
+- **`terraform.tfvars` の変数が多くなる**: 監視対象が増えると変数が増える。環境ごとに `terraform.tfvars` を分け、`environments/dev` / `environments/prod` 構成にすることでスケールしやすくなる。
+
+---
+
 ## AI 活用について
 
 本プロジェクトは以下の Anthropic ツールを活用して開発しています。
