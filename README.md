@@ -42,6 +42,14 @@ CloudWatch + SNS による異常検知から、障害一次対応手順書（Run
 
 ---
 
+## デモ
+
+![デモ GIF](docs/demo/demo.gif)
+
+CloudWatch アラームが ALARM 状態に発火し、SNS 通知が送信される様子。ダッシュボードで監視状況を一元確認できます。
+
+---
+
 ## デモ（Runbook）
 
 | ファイル | 対象障害 |
