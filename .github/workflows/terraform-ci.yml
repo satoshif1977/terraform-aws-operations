@@ -27,7 +27,7 @@ jobs:
     steps:
       # ── 1. ソースコード取得 ────────────────────────────────
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # ── 2. Terraform セットアップ ─────────────────────────
       - name: Setup Terraform
