@@ -198,6 +198,46 @@ terraform destroy
 
 ---
 
+## トラブルシューティング
+
+| 症状 | 原因 | 対処法 |
+|---|---|---|
+| アラームが届かない | SNS サブスクリプション未確認 | apply 後に届いたメールの「Confirm subscription」をクリック |
+| アラームが `INSUFFICIENT_DATA` のまま | 監視対象リソースが存在しない | `ec2_instance_ids` / `alb_arn_suffix` / `rds_instance_identifier` が正しいか確認 |
+| `terraform apply` で `AlreadyExistsException` | SNS トピック名が競合 | `terraform.tfvars` の `project_name` を変更して再 apply |
+| ダッシュボードの URL が開かない | outputs 未確認 | `terraform output dashboard_url` で URL を取得してブラウザで開く |
+
+---
+
+## ローカル開発・テスト方法
+
+### Terraform の静的チェック（AWS 接続不要）
+
+```bash
+cd terraform
+terraform fmt -check
+terraform validate
+```
+
+### Checkov ローカルスキャン
+
+```bash
+pip install checkov
+checkov -d terraform/ --soft-fail
+```
+
+### アラームの手動テスト（apply 後）
+
+```bash
+# EC2 CPU アラームを手動で ALARM 状態にして SNS 通知が届くか確認
+aws-vault exec personal-dev-source -- aws cloudwatch set-alarm-state \
+  --alarm-name "<アラーム名>" \
+  --state-value ALARM \
+  --state-reason "手動テスト"
+```
+
+---
+
 ## AI 活用について
 
 本プロジェクトは以下の Anthropic ツールを活用して開発しています。
