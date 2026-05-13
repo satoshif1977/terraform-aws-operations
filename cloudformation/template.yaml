@@ -1,0 +1,444 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudWatch Alarm / SNS / Dashboard 監視スタック。
+  terraform-aws-operations の Terraform 版と同等の監視構成を
+  CloudFormation で実装。Terraform との比較学習用。
+
+# ── パラメータ ────────────────────────────────────────────────────────────
+# Terraform の variables.tf に対応する。
+# CFn は for_each が使えないため、EC2・Lambda は最大 2 台/2 関数まで個別パラメータで対応。
+Parameters:
+
+  ProjectName:
+    Type: String
+    Default: ops
+    Description: プロジェクト名（リソース命名プレフィックス）
+
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, stg, prod]
+    Description: 環境名
+
+  AlertEmail:
+    Type: String
+    Description: CloudWatch アラーム通知先メールアドレス（デプロイ後に確認メールが届くのでクリック必須）
+
+  # ── EC2 監視対象（最大 2 台）──────────────────────────────────────────
+  # Terraform: ec2_instance_ids = list(string) に対応
+  # CFn は for_each が使えないため、個別パラメータ + Condition で代替する
+  EC2InstanceId1:
+    Type: String
+    Default: ""
+    Description: 監視対象 EC2 インスタンス ID 1つ目（例: i-0abc123def456）。空白 = 監視しない
+
+  EC2InstanceId2:
+    Type: String
+    Default: ""
+    Description: 監視対象 EC2 インスタンス ID 2つ目。空白 = 監視しない
+
+  # ── ALB 監視対象 ─────────────────────────────────────────────────────
+  AlbArnSuffix:
+    Type: String
+    Default: ""
+    Description: 監視対象 ALB の ARN サフィックス（例: app/my-alb/1234567890abcdef）。空白 = 監視しない
+
+  # ── RDS 監視対象 ─────────────────────────────────────────────────────
+  RdsInstanceIdentifier:
+    Type: String
+    Default: ""
+    Description: 監視対象 RDS インスタンス識別子（例: myapp-dev-db）。空白 = 監視しない
+
+  # ── Lambda 監視対象（最大 2 関数）────────────────────────────────────
+  LambdaFunctionName1:
+    Type: String
+    Default: ""
+    Description: 監視対象 Lambda 関数名 1つ目。空白 = 監視しない
+
+  LambdaFunctionName2:
+    Type: String
+    Default: ""
+    Description: 監視対象 Lambda 関数名 2つ目。空白 = 監視しない
+
+  # ── アラーム閾値 ─────────────────────────────────────────────────────
+  EC2CpuThreshold:
+    Type: Number
+    Default: 80
+    Description: EC2 CPU 使用率アラーム閾値（%）
+
+  RdsCpuThreshold:
+    Type: Number
+    Default: 80
+    Description: RDS CPU 使用率アラーム閾値（%）
+
+  # Terraform 版: rds_storage_threshold_gb * 1024^3 で計算
+  # CFn は演算非対応のため、バイト値を直接指定する
+  # デフォルト 5368709120 = 5 GB（5 * 1024 * 1024 * 1024）
+  RdsStorageThresholdBytes:
+    Type: Number
+    Default: 5368709120
+    Description: >
+      RDS 空きストレージアラーム閾値（バイト）。
+      デフォルト 5368709120 = 5 GB。
+      ※ CFn は演算非対応のため GB ではなくバイト値で指定する（Terraform 版との差異）
+
+  Alb5xxThreshold:
+    Type: Number
+    Default: 10
+    Description: ALB 5xx エラー数アラーム閾値（1分間）
+
+  LambdaErrorThreshold:
+    Type: Number
+    Default: 1
+    Description: Lambda エラー数アラーム閾値（5分間）
+
+  LambdaDurationThresholdMs:
+    Type: Number
+    Default: 10000
+    Description: Lambda 実行時間アラーム閾値（ミリ秒）。デフォルト 10000 = 10秒
+
+  LambdaThrottleThreshold:
+    Type: Number
+    Default: 1
+    Description: Lambda スロットリング数アラーム閾値（5分間）
+
+# ── 条件 ─────────────────────────────────────────────────────────────────
+# Terraform の count = var.xxx != "" ? 1 : 0 に対応する
+Conditions:
+  HasEC2Instance1: !Not [!Equals [!Ref EC2InstanceId1, ""]]
+  HasEC2Instance2: !Not [!Equals [!Ref EC2InstanceId2, ""]]
+  HasAlb:          !Not [!Equals [!Ref AlbArnSuffix, ""]]
+  HasRds:          !Not [!Equals [!Ref RdsInstanceIdentifier, ""]]
+  HasLambda1:      !Not [!Equals [!Ref LambdaFunctionName1, ""]]
+  HasLambda2:      !Not [!Equals [!Ref LambdaFunctionName2, ""]]
+
+# ── リソース ─────────────────────────────────────────────────────────────
+Resources:
+
+  # ── 1. SNS トピック ──────────────────────────────────────────────────
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-${Environment}-alert"
+
+  # NOTE: デプロイ後、指定メールアドレスに確認メールが届く。
+  #       必ず「Confirm subscription」リンクをクリックすること（クリックしないと通知が届かない）。
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # ── 2. EC2 監視 ──────────────────────────────────────────────────────
+  # Terraform: for_each = toset(var.ec2_instance_ids) に対応
+  # CFn では Condition で各リソースの作成有無を制御する
+
+  EC2Cpu1Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasEC2Instance1
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-ec2-cpu-${EC2InstanceId1}"
+      AlarmDescription: !Sub "EC2 CPU 使用率が ${EC2CpuThreshold}% を超過"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref EC2CpuThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2InstanceId1
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+  EC2Cpu2Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasEC2Instance2
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-ec2-cpu-${EC2InstanceId2}"
+      AlarmDescription: !Sub "EC2 CPU 使用率が ${EC2CpuThreshold}% を超過"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref EC2CpuThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2InstanceId2
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+  EC2StatusCheck1Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasEC2Instance1
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-ec2-status-${EC2InstanceId1}"
+      AlarmDescription: EC2 ステータスチェック失敗（インスタンス障害の可能性）
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2InstanceId1
+      AlarmActions:
+        - !Ref AlertTopic
+
+  EC2StatusCheck2Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasEC2Instance2
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-ec2-status-${EC2InstanceId2}"
+      AlarmDescription: EC2 ステータスチェック失敗（インスタンス障害の可能性）
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref EC2InstanceId2
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # ── 3. ALB 監視 ──────────────────────────────────────────────────────
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlb
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-alb-5xx"
+      AlarmDescription: !Sub "ALB 5xx エラーが ${Alb5xxThreshold} 件/分 を超過（アプリ障害の疑い）"
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_ELB_5XX_Count
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref Alb5xxThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref AlbArnSuffix
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # ── 4. RDS 監視 ──────────────────────────────────────────────────────
+  RdsCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasRds
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-rds-cpu"
+      AlarmDescription: !Sub "RDS CPU 使用率が ${RdsCpuThreshold}% を超過"
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref RdsCpuThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsInstanceIdentifier
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # Terraform 版: threshold = var.rds_storage_threshold_gb * 1024 * 1024 * 1024
+  # CFn は演算非対応のため RdsStorageThresholdBytes パラメータで直接バイト値を受け取る
+  RdsStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasRds
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-rds-storage"
+      AlarmDescription: !Sub "RDS 空きストレージが ${RdsStorageThresholdBytes} バイト以下（ディスク枯渇の危険）"
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref RdsStorageThresholdBytes
+      ComparisonOperator: LessThanOrEqualToThreshold
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsInstanceIdentifier
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # ── 5. Lambda 監視 ───────────────────────────────────────────────────
+  # Terraform: for_each = toset(var.lambda_function_names) に対応
+  # CFn では Lambda1 / Lambda2 を Condition で個別制御する
+
+  Lambda1ErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasLambda1
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-lambda-errors-${LambdaFunctionName1}"
+      AlarmDescription: !Sub "Lambda 関数 ${LambdaFunctionName1} でエラーが発生（${LambdaErrorThreshold} 件以上/5分）"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref LambdaErrorThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName1
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+  Lambda1DurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasLambda1
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-lambda-duration-${LambdaFunctionName1}"
+      AlarmDescription: !Sub "Lambda 関数 ${LambdaFunctionName1} の実行時間が ${LambdaDurationThresholdMs}ms を超過（タイムアウト予兆）"
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref LambdaDurationThresholdMs
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName1
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Lambda1ThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasLambda1
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-lambda-throttles-${LambdaFunctionName1}"
+      AlarmDescription: !Sub "Lambda 関数 ${LambdaFunctionName1} でスロットリングが発生（同時実行数が上限に到達）"
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref LambdaThrottleThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName1
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Lambda2ErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasLambda2
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-lambda-errors-${LambdaFunctionName2}"
+      AlarmDescription: !Sub "Lambda 関数 ${LambdaFunctionName2} でエラーが発生（${LambdaErrorThreshold} 件以上/5分）"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref LambdaErrorThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName2
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+  Lambda2DurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasLambda2
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-lambda-duration-${LambdaFunctionName2}"
+      AlarmDescription: !Sub "Lambda 関数 ${LambdaFunctionName2} の実行時間が ${LambdaDurationThresholdMs}ms を超過（タイムアウト予兆）"
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref LambdaDurationThresholdMs
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName2
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Lambda2ThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasLambda2
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-lambda-throttles-${LambdaFunctionName2}"
+      AlarmDescription: !Sub "Lambda 関数 ${LambdaFunctionName2} でスロットリングが発生（同時実行数が上限に到達）"
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref LambdaThrottleThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LambdaFunctionName2
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # ── 6. CloudWatch ダッシュボード ────────────────────────────────────
+  MainDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${ProjectName}-${Environment}-dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "text",
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 2,
+              "properties": {
+                "markdown": "# ${ProjectName}-${Environment} 監視ダッシュボード\n\n監視対象: EC2 / ALB / RDS / Lambda"
+              }
+            }
+          ]
+        }
+
+# ── 出力 ─────────────────────────────────────────────────────────────────
+# Terraform の outputs.tf に対応する
+Outputs:
+
+  SnsTopicArn:
+    Description: アラーム通知 SNS トピック ARN
+    Value: !Ref AlertTopic
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-alert-topic-arn"
+
+  DashboardUrl:
+    Description: CloudWatch ダッシュボード URL
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home#dashboards:name=${ProjectName}-${Environment}-dashboard"
+
+  StackName:
+    Description: CloudFormation スタック名
+    Value: !Ref AWS::StackName
