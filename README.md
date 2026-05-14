@@ -257,3 +257,7 @@ aws-vault exec personal-dev-source -- aws cloudwatch set-alarm-state \
 - [terraform-3tier-webapp](https://github.com/satoshif1977/terraform-3tier-webapp) - この monitoring モジュールの監視対象となる 3 層 Web アーキテクチャ（Terraform 版）
 - [aws-cdk-3tier-app](https://github.com/satoshif1977/aws-cdk-3tier-app) - 同構成の CDK 版。`monitoring-construct.ts` で同等の CloudWatch アラームを実装
 - [aws-ecs-bedrock-chat](https://github.com/satoshif1977/aws-ecs-bedrock-chat) - ECS Fargate + Bedrock チャットアプリ（CloudWatch Logs 連携）
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and security policies.
