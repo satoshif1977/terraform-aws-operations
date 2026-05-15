@@ -33,7 +33,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "~1.5"
+          terraform_version: "~1.9"
 
       # ── 3. フォーマットチェック（AWS 不要）────────────────
       - name: Terraform Format
@@ -46,6 +46,10 @@ jobs:
       # ── 5. 構文・設定バリデーション（AWS 不要）───────────
       - name: Terraform Validate
         run: terraform validate
+
+      # ── 5.5. Terraform Test（mock_provider で AWS 不要）──
+      - name: Terraform Test
+        run: terraform test
 
       # ── 6. AWS 認証（OIDC / AWS_ROLE_ARN が設定済みの場合）
       - name: Configure AWS credentials
