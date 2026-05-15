@@ -57,6 +57,40 @@ CloudWatch アラームが ALARM 状態に発火し、SNS 通知が送信され�
 | [01_ec2_troubleshooting.md](docs/runbook/01_ec2_troubleshooting.md) | EC2 接続不可・CPU 高負荷・ステータスチェック失敗 |
 | [02_alb_rds_troubleshooting.md](docs/runbook/02_alb_rds_troubleshooting.md) | ALB 502/504・RDS 接続エラー・ストレージ逼迫 |
 
+### Runbook の更新方法
+
+新しいアラームや監視対象を追加した際は、対応する Runbook も同時に更新します。
+
+```bash
+# 1. 既存 Runbook を参考に新ファイルを作成
+cp docs/runbook/01_ec2_troubleshooting.md docs/runbook/03_new_service_troubleshooting.md
+
+# 2. 必要なセクションを編集（症状・原因・確認コマンド・対処手順）
+# 3. README のデモ表に追記してコミット
+git add docs/runbook/03_new_service_troubleshooting.md README.md
+git commit -m "docs: add runbook for <service name>"
+```
+
+Runbook のフォーマット（推奨）:
+
+```markdown
+## 症状
+- 何が起きているか
+
+## 考えられる原因
+1. 原因 A
+2. 原因 B
+
+## 確認コマンド
+\`\`\`bash
+aws cloudwatch describe-alarms --alarm-names "alarm-name"
+\`\`\`
+
+## 対処手順
+1. ステップ 1
+2. ステップ 2
+```
+
 ---
 
 ## 技術スタック
