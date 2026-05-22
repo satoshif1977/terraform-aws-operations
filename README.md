@@ -2,6 +2,7 @@
 
 ![Terraform CI](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml/badge.svg)
 ![Terraform](https://img.shields.io/badge/Terraform-623CE4?style=flat&logo=terraform&logoColor=white)
+![CloudFormation](https://img.shields.io/badge/CloudFormation-FF4F00?style=flat&logo=amazon-aws&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazon-aws&logoColor=white)
 ![Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-orange?logo=anthropic)
 ![Claude Cowork](https://img.shields.io/badge/Daily%20Use-Claude%20Cowork-blueviolet?logo=anthropic)
@@ -97,11 +98,27 @@ aws cloudwatch describe-alarms --alarm-names "alarm-name"
 
 | カテゴリ | 技術・サービス |
 |---------|--------------|
-| IaC | Terraform（モジュール構成） |
+| IaC | Terraform（メイン） / CloudFormation（比較実装） |
 | 監視 | Amazon CloudWatch（アラーム・ダッシュボード） |
 | 通知 | Amazon SNS（メール通知） |
-| 対象 | EC2 / ALB / RDS |
+| 対象 | EC2 / ALB / RDS / Lambda |
 | 権限管理 | IAM Role（最小権限） |
+
+---
+
+## CloudFormation 版について
+
+`cloudformation/template.yaml` に、Terraform 版と同等の監視構成を CloudFormation で実装しています。
+IaC ツール間の設計思想の違いを比較学習することを目的とした参考実装です。
+
+| 機能 | Terraform | CloudFormation |
+|-----|-----------|---------------|
+| 複数リソースのループ | `for_each = toset(var.list)` | 個別パラメータ + `Conditions` で代替 |
+| 条件付きリソース | `count = var.xxx != "" ? 1 : 0` | `Conditions` + `Condition:` キー |
+| 数値演算 | `var.gb * 1024 * 1024 * 1024` | 演算非対応 → バイト値を直接指定 |
+| 状態管理 | S3 + DynamoDB（tfstate） | CloudFormation が内部管理（マネージド） |
+
+詳細は [`cloudformation/README.md`](cloudformation/README.md) を参照。
 
 ---
 
@@ -109,8 +126,8 @@ aws cloudwatch describe-alarms --alarm-names "alarm-name"
 
 ```
 terraform-aws-operations/
-├── terraform/
-│   ├── main.tf              # モジュール統合・SNS トピック定義
+├── terraform/               # Terraform 版（メイン）
+│   ├── main.tf              # SNS トピック・CloudWatch アラーム定義
 │   ├── variables.tf         # 監視対象・閾値の変数定義
 │   ├── outputs.tf           # SNS ARN・ダッシュボード URL 出力
 │   ├── provider.tf
@@ -118,6 +135,9 @@ terraform-aws-operations/
 │   └── modules/
 │       ├── monitoring/      # CloudWatch アラーム・ダッシュボード
 │       └── iam/             # CloudWatch → SNS 権限ロール
+├── cloudformation/          # CloudFormation 版（Terraform との比較用）
+│   ├── template.yaml        # 同等監視構成の CFn テンプレート
+│   └── README.md            # デプロイ手順・Terraform との差異比較
 └── docs/
     ├── architecture.drawio
     ├── architecture.drawio.png
