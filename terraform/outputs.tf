@@ -18,3 +18,13 @@ output "alarm_names" {
     aws_cloudwatch_metric_alarm.rds_storage[*].alarm_name,
   )
 }
+
+output "cost_anomaly_monitor_arn" {
+  description = "Cost Anomaly Detection モニター ARN"
+  value       = aws_ce_anomaly_monitor.service.arn
+}
+
+output "cost_anomaly_subscription_arn" {
+  description = "Cost Anomaly Detection サブスクリプション ARN"
+  value       = aws_ce_anomaly_subscription.daily.arn
+}

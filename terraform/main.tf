@@ -3,6 +3,7 @@
 #   1. SNS トピック（アラーム通知先）
 #   2. CloudWatch アラーム（EC2 / ALB / RDS）
 #   3. IAM ロール（CloudWatch → SNS への通知権限）
+#   4. Cost Anomaly Detection（コスト異常検知）
 # ──────────────────────────────────────────────────────────
 
 # ── 1. SNS トピック ────────────────────────────────────────
@@ -205,7 +206,67 @@ resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
   alarm_actions = [aws_sns_topic.alert.arn]
 }
 
-# ── 6. CloudWatch ダッシュボード ───────────────────────────
+# ── 6. Cost Anomaly Detection ─────────────────────────────
+# AWS の課金異常を自動検知して SNS 通知する
+# サービス別の支出を監視し、急激なコスト増加をアラート
+
+# SNS トピックポリシー（Cost Explorer からの Publish を許可）
+resource "aws_sns_topic_policy" "cost_anomaly" {
+  arn = aws_sns_topic.alert.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCostAnomalyDetection"
+      Effect    = "Allow"
+      Principal = { Service = "costalerts.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.alert.arn
+    }]
+  })
+}
+
+# コスト異常モニター（AWSサービス別に監視）
+resource "aws_ce_anomaly_monitor" "service" {
+  name              = "${var.project_name}-${var.environment}-cost-monitor"
+  monitor_type      = "DIMENSIONAL"
+  monitor_dimension = "SERVICE"
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+# 異常検知サブスクリプション（日次・影響金額 20% 以上で通知）
+resource "aws_ce_anomaly_subscription" "daily" {
+  name      = "${var.project_name}-${var.environment}-cost-alert"
+  frequency = "DAILY"
+
+  monitor_arn_list = [aws_ce_anomaly_monitor.service.arn]
+
+  # 閾値: 前日比でコストが var.cost_anomaly_impact_percentage % 以上増加した場合に通知
+  threshold_expression {
+    dimension {
+      key           = "ANOMALY_TOTAL_IMPACT_PERCENTAGE"
+      values        = [tostring(var.cost_anomaly_impact_percentage)]
+      match_options = ["GREATER_THAN_OR_EQUAL"]
+    }
+  }
+
+  subscriber {
+    address = aws_sns_topic.alert.arn
+    type    = "SNS"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+# ── 7. CloudWatch ダッシュボード ───────────────────────────
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-${var.environment}-dashboard"
 

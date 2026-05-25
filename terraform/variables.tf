@@ -97,3 +97,10 @@ variable "lambda_throttle_threshold" {
   type        = number
   default     = 1
 }
+
+# ── Cost Anomaly Detection ────────────────────────────────
+variable "cost_anomaly_impact_percentage" {
+  description = "コスト異常検知の閾値（前日比でこの割合以上の増加で通知）"
+  type        = number
+  default     = 20
+}

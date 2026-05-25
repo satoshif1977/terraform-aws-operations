@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-25
+
+### Added
+- **Cost Anomaly Detection 追加**（コスト異常自動検知）
+  - `aws_ce_anomaly_monitor`：AWSサービス別にコスト異常を監視
+  - `aws_ce_anomaly_subscription`：前日比 20% 以上の増加で SNS 通知（日次）
+  - `aws_sns_topic_policy`：Cost Explorer → SNS Publish 許可ポリシー追加
+  - `var.cost_anomaly_impact_percentage`：閾値を変数化（デフォルト 20%）
+  - outputs: `cost_anomaly_monitor_arn` / `cost_anomaly_subscription_arn`
+
 ## [1.3.0] - 2026-05-19
 
 ### Added
