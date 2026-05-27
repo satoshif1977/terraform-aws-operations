@@ -8,6 +8,11 @@ mock_provider "aws" {
       arn = "arn:aws:sns:ap-northeast-1:123456789012:mock-alert-topic"
     }
   }
+  mock_resource "aws_ce_anomaly_monitor" {
+    defaults = {
+      arn = "arn:aws:ce::123456789012:anomalymonitor/mock-monitor"
+    }
+  }
 }
 
 # ── SNS トピック命名規則の確認 ─────────────────────────────
