@@ -73,7 +73,7 @@ jobs:
       # ── 8. Plan 結果を PR にコメント ──────────────────────
       - name: Comment Plan on PR
         if: github.event_name == 'pull_request' && vars.AWS_ROLE_ARN != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const plan = `${{ steps.plan.outputs.stdout }}`;
