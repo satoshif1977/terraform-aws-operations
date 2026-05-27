@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-27
+
+### Fixed
+- terraform test: mock_provider に aws_ce_anomaly_monitor を追加（CI test 修正）
+
+### Changed
+- CI アクション更新: actions/checkout v4→v6 / aws-actions/configure-aws-credentials v4→v6 / actions/github-script v7→v9 / hashicorp/setup-terraform v3→v4
+- hashicorp/aws プロバイダーを v5.0 → v6.46 に更新
+
 ## [1.4.0] - 2026-05-25
 
 ### Added
