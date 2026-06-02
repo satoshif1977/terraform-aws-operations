@@ -104,3 +104,29 @@ variable "cost_anomaly_impact_percentage" {
   type        = number
   default     = 20
 }
+
+# ── セキュリティ監視 ──────────────────────────────────────
+
+variable "guardduty_enabled" {
+  description = "GuardDuty を有効化するか（false にすると全 GuardDuty リソースをスキップ）"
+  type        = bool
+  default     = true
+}
+
+variable "guardduty_severity_threshold" {
+  description = "通知対象の GuardDuty Finding 重大度の下限（4.0=MEDIUM / 7.0=HIGH）"
+  type        = number
+  default     = 4.0
+}
+
+variable "securityhub_enabled" {
+  description = "Security Hub を有効化するか（CIS Benchmark + FSBP を購読）"
+  type        = bool
+  default     = true
+}
+
+variable "config_enabled" {
+  description = "AWS Config を有効化するか（Configuration Recorder + コンプライアンスルール）"
+  type        = bool
+  default     = true
+}

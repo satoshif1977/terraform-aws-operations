@@ -13,6 +13,30 @@ mock_provider "aws" {
       arn = "arn:aws:ce::123456789012:anomalymonitor/mock-monitor"
     }
   }
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:role/mock-role"
+    }
+  }
+  mock_resource "aws_cloudwatch_event_rule" {
+    defaults = {
+      arn = "arn:aws:events:ap-northeast-1:123456789012:rule/mock-rule"
+    }
+  }
+  mock_resource "aws_lambda_function" {
+    defaults = {
+      arn            = "arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function"
+      invoke_arn     = "arn:aws:apigateway:ap-northeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function/invocations"
+      qualified_arn  = "arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function:$LATEST"
+    }
+  }
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "123456789012"
+      arn        = "arn:aws:iam::123456789012:user/mock-user"
+      user_id    = "AIDAMOCKUSERID"
+    }
+  }
 }
 
 # ── SNS トピック命名規則の確認 ─────────────────────────────

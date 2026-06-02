@@ -28,3 +28,25 @@ output "cost_anomaly_subscription_arn" {
   description = "Cost Anomaly Detection サブスクリプション ARN"
   value       = aws_ce_anomaly_subscription.daily.arn
 }
+
+# ── セキュリティ監視 Outputs ──────────────────────────────
+
+output "guardduty_detector_id" {
+  description = "GuardDuty 検知器 ID"
+  value       = aws_guardduty_detector.main.id
+}
+
+output "guardduty_notifier_function_name" {
+  description = "GuardDuty Finding 通知 Lambda 関数名"
+  value       = aws_lambda_function.guardduty_notifier.function_name
+}
+
+output "security_hub_enabled" {
+  description = "Security Hub 有効化状態"
+  value       = var.securityhub_enabled
+}
+
+output "config_s3_bucket" {
+  description = "AWS Config ログ保存 S3 バケット名"
+  value       = var.config_enabled ? aws_s3_bucket.config_logs[0].bucket : null
+}

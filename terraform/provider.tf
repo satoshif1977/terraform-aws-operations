@@ -6,6 +6,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.46"
     }
+    # Lambda ZIP パッケージ生成に使用（guardduty-notifier）
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 
   # TODO: 本番運用時は S3 バックエンドに切り替える
