@@ -8,8 +8,8 @@
 ![Claude Cowork](https://img.shields.io/badge/Daily%20Use-Claude%20Cowork-blueviolet?logo=anthropic)
 ![Claude Skills](https://img.shields.io/badge/Custom-Skills%20Configured-green?logo=anthropic)
 
-AWS インフラの監視・アラート設定と障害対応 Runbook を Terraform でコード化した運用自動化 PoC。
-CloudWatch + SNS による異常検知から、障害一次対応手順書（Runbook）まで、AWS 運用補助業務を想定した実践的な構成です。
+AWS インフラの**監視・セキュリティ監視・障害対応 Runbook** を Terraform でコード化した運用自動化 PoC。
+CloudWatch + SNS による異常検知、GuardDuty / Security Hub / AWS Config によるセキュリティ3本柱、障害一次対応手順書（Runbook）まで、AWS 運用補助業務を想定した実践的な構成です。
 
 ---
 
@@ -19,9 +19,14 @@ CloudWatch + SNS による異常検知から、障害一次対応手順書（Run
 
 | コンポーネント | 内容 |
 |---|---|
-| **Amazon CloudWatch** | EC2 / ALB / RDS の監視アラーム + ダッシュボード |
-| **Amazon SNS** | アラーム検知時のメール通知（Confirm subscription 方式） |
-| **IAM Role** | CloudWatch → SNS への最小権限ポリシー |
+| **Amazon CloudWatch** | EC2 / ALB / RDS / Lambda の監視アラーム + ダッシュボード |
+| **Amazon SNS** | アラーム検知・GuardDuty Finding のメール通知 |
+| **Amazon GuardDuty** | 脅威検知（S3 アクセス異常 / EBS マルウェアスキャン） |
+| **AWS Security Hub** | CIS Benchmark v1.4.0 + AWS FSBP によるコンプライアンス評価 |
+| **AWS Config** | 全リソース設定記録 + コンプライアンスルール 4件 |
+| **EventBridge** | GuardDuty Finding（severity ≥ 4.0）を Lambda へ転送 |
+| **AWS Lambda (Python)** | GuardDuty Finding を日本語整形して SNS 通知 |
+| **IAM Role** | 各サービスへの最小権限ポリシー |
 | **Runbook** | EC2 / ALB / RDS の障害一次対応手順書（Markdown） |
 
 ---
@@ -99,10 +104,13 @@ aws cloudwatch describe-alarms --alarm-names "alarm-name"
 | カテゴリ | 技術・サービス |
 |---------|--------------|
 | IaC | Terraform（メイン） / CloudFormation（比較実装） |
+| 言語 | HCL（Terraform） / Python 3.13（Lambda） |
 | 監視 | Amazon CloudWatch（アラーム・ダッシュボード） |
-| 通知 | Amazon SNS（メール通知） |
-| 対象 | EC2 / ALB / RDS / Lambda |
-| 権限管理 | IAM Role（最小権限） |
+| セキュリティ | Amazon GuardDuty / AWS Security Hub / AWS Config |
+| イベント連携 | Amazon EventBridge（GuardDuty Finding ルーティング） |
+| 通知 | Amazon SNS（CloudWatch アラーム + GuardDuty Finding） |
+| 対象リソース | EC2 / ALB / RDS / Lambda |
+| 権限管理 | IAM Role（各サービス最小権限） |
 
 ---
 
@@ -128,13 +136,18 @@ IaC ツール間の設計思想の違いを比較学習することを目的と�
 terraform-aws-operations/
 ├── terraform/               # Terraform 版（メイン）
 │   ├── main.tf              # SNS トピック・CloudWatch アラーム定義
-│   ├── variables.tf         # 監視対象・閾値の変数定義
-│   ├── outputs.tf           # SNS ARN・ダッシュボード URL 出力
-│   ├── provider.tf
+│   ├── security.tf          # GuardDuty / Security Hub / AWS Config 定義
+│   ├── variables.tf         # 監視対象・閾値・セキュリティ ON/OFF 変数
+│   ├── outputs.tf           # SNS ARN・ダッシュボード URL・GuardDuty ID 出力
+│   ├── provider.tf          # AWS / archive プロバイダー設定
 │   ├── terraform.tfvars.example
-│   └── modules/
-│       ├── monitoring/      # CloudWatch アラーム・ダッシュボード
-│       └── iam/             # CloudWatch → SNS 権限ロール
+│   └── tests/               # terraform test（17 テスト・mock_provider 使用）
+│       ├── defaults.tftest.hcl
+│       ├── conditional_resources.tftest.hcl
+│       └── naming.tftest.hcl
+├── lambda/
+│   └── guardduty-notifier/
+│       └── index.py         # GuardDuty Finding → SNS 通知 Lambda（Python）
 ├── cloudformation/          # CloudFormation 版（Terraform との比較用）
 │   ├── template.yaml        # 同等監視構成の CFn テンプレート
 │   └── README.md            # デプロイ手順・Terraform との差異比較
@@ -204,16 +217,20 @@ terraform destroy
 | ロール | 権限 | 理由 |
 |---|---|---|
 | CloudWatch Alarm Role | `sns:Publish`（対象 SNS トピックのみ） | アラーム → SNS 通知に必要な最小権限 |
+| guardduty-notifier-role | `sns:Publish`（対象 SNS トピックのみ）+ `AWSLambdaBasicExecutionRole` | GuardDuty Finding を SNS に転送する最小権限 |
+| config-role | `AWS_ConfigRole`（マネージドポリシー） | AWS Config がリソースを記録・S3 に配信するために必要な権限 |
 
 ---
 
 ## 技術的なポイント・工夫
 
 - **変数化による再利用性**: 監視対象の EC2 ID・ALB ARN・RDS 識別子・閾値をすべて変数化。`terraform.tfvars` を書き換えるだけで任意の環境に適用できる
-- **モジュール構成**: `monitoring/`（アラーム・ダッシュボード）と `iam/`（権限）を分離し、独立して再利用可能
+- **セキュリティ ON/OFF フラグ**: `guardduty_enabled` / `securityhub_enabled` / `config_enabled` で dev 環境のコスト節約が可能
+- **GuardDuty severity フィルタ**: EventBridge で severity ≥ 4.0（MEDIUM以上）のみ Lambda へ転送することでノイズを削減
+- **Python Lambda で構造化通知**: GuardDuty Finding を日本語整形し、重大度・タイプ・コンソール URL を含む可読性の高いメール通知を実現
+- **IaC セキュア・バイ・デフォルト**: Config ログ用 S3 はバージョニング・SSE-AES256・パブリックアクセスブロック・バケットポリシーを最初から組み込み
 - **for_each による複数 EC2 対応**: EC2 アラームは `for_each` で複数インスタンスを一括管理
 - **Runbook のコード管理**: 障害対応手順書を Markdown で Git 管理し、インフラコードと一体で運用できる設計
-- **SNS Confirm subscription**: apply 直後のメール確認忘れを防ぐため、README と outputs に明記
 
 ---
 
@@ -224,14 +241,20 @@ terraform destroy
 | CloudWatch アラーム | $0.10 / アラーム / 月（10個で約 $1/月） |
 | SNS メール通知 | 100,000件まで無料 |
 | CloudWatch ダッシュボード | $3 / ダッシュボード / 月 |
+| GuardDuty | 最初の 30日間無料 / 以降は処理データ量に応じた従量課金 |
+| Security Hub | 最初の 30日間無料 / 以降 $0.0010 / チェック / 月 |
+| AWS Config | $0.003 / 設定アイテム記録 / リージョン |
+| Lambda（notifier） | 月 100万リクエスト / 400,000 GB-秒まで無料 |
 
-> 検証後は `terraform destroy` でリソース削除を推奨。
+> GuardDuty / Security Hub / Config は無料トライアル終了後に課金が発生します。検証後は `terraform destroy` またはフラグで無効化（`guardduty_enabled = false` 等）を推奨。
 
 ---
 
 ## 技術的な見どころ
 
 - **「監視設定も IaC で管理できる」**: CloudWatch アラームを手動でポチポチではなく Terraform でコード化。環境の再現性・変更履歴の担保を説明できる
+- **「セキュリティ3本柱を一括管理」**: GuardDuty（検知）+ Security Hub（ダッシュボード）+ Config（コンプライアンス）を Terraform で一体管理。企業ガバナンス要件への対応を示せる
+- **「Python × Terraform の組み合わせ」**: HCL だけでなく Python Lambda を組み合わせることで多言語スタックの実例として訴求できる
 - **「Runbook まで一体管理」**: アラームが鳴った後の対応手順書も Git で管理。インフラ担当が "作るだけ" でなく "運用まで考える" 姿勢を示せる
 - **「モジュール化で横展開できる」**: 別プロジェクト（terraform-3tier-webapp 等）の監視設定に同モジュールをそのまま適用可能
 

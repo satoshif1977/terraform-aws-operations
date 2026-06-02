@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-02
+
+### Added
+- **セキュリティ監視レイヤー追加**（`terraform/security.tf`）
+  - **Amazon GuardDuty**: 脅威検知器・S3 アクセス異常検知（S3_DATA_EVENTS）・EBS マルウェアスキャン（EBS_MALWARE_PROTECTION）
+  - **GuardDuty Finding 通知パイプライン**: EventBridge ルール（severity ≥ 4.0）→ Lambda → SNS メール通知
+  - **Python Lambda（guardduty-notifier）**: Finding を日本語整形し重大度ラベル（CRITICAL / HIGH / MEDIUM）付きで通知（`lambda/guardduty-notifier/index.py`）
+  - **AWS Security Hub**: CIS AWS Foundations Benchmark v1.4.0 + AWS Foundational Security Best Practices v1.0.0 購読
+  - **AWS Config**: Configuration Recorder（全リソース記録）+ S3 Delivery Channel + コンプライアンスルール 4件
+    - `required-tags`: 必須タグ（Environment / Project / ManagedBy）未付与リソース検出
+    - `s3-encryption`: SSE 未設定 S3 バケット検出
+    - `root-mfa`: ルートアカウント MFA 未設定検出
+    - `vpc-flow-logs`: VPC フローログ無効検出
+- セキュリティ関連変数追加: `guardduty_enabled` / `guardduty_severity_threshold` / `securityhub_enabled` / `config_enabled`
+- セキュリティ関連 outputs 追加: `guardduty_detector_id` / `guardduty_notifier_function_name` / `security_hub_enabled` / `config_s3_bucket`
+- `hashicorp/archive` プロバイダー追加（Lambda ZIP パッケージ自動生成）
+- terraform test mock 拡充: `aws_iam_role` / `aws_cloudwatch_event_rule` / `aws_lambda_function` / `aws_caller_identity` を追加し全 17 テスト通過
+
 ## [1.5.0] - 2026-05-27
 
 ### Fixed
