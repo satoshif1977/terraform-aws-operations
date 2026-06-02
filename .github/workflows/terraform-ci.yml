@@ -90,3 +90,26 @@ jobs:
               repo: context.repo.repo,
               body,
             });
+
+  security:
+    name: Checkov セキュリティスキャン
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          soft_fail: false
+          # SNS KMS（alias/aws/sns）は修正済み（CKV_AWS_26）
+          # 以下は dev/PoC として意図的に省略
+          skip_check: >-
+            CKV_AWS_91,CKV_AWS_118,CKV_AWS_338
+          output_format: cli

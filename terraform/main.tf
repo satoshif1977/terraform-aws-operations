@@ -6,9 +6,97 @@
 #   4. Cost Anomaly Detection（コスト異常検知）
 # ──────────────────────────────────────────────────────────
 
+# ── 0. ダッシュボードウィジェット定義 ─────────────────────
+locals {
+  # EC2 CPU ウィジェット（監視対象インスタンスごとに 1 つ生成）
+  ec2_cpu_widgets = [for id in var.ec2_instance_ids : {
+    type   = "metric"
+    width  = 12
+    height = 6
+    properties = {
+      title  = "EC2 CPU使用率 - ${id}"
+      region = var.aws_region
+      metrics = [["AWS/EC2", "CPUUtilization", "InstanceId", id,
+        { stat = "Average", period = 300 }
+      ]]
+      yAxis = { left = { min = 0, max = 100 } }
+      annotations = {
+        horizontal = [{
+          value = var.ec2_cpu_threshold
+          label = "閾値 ${var.ec2_cpu_threshold}%"
+          color = "#ff6961"
+        }]
+      }
+    }
+  }]
+
+  # ALB 5xx ウィジェット（alb_arn_suffix が空の場合はスキップ）
+  alb_widgets = var.alb_arn_suffix != "" ? [{
+    type   = "metric"
+    width  = 12
+    height = 6
+    properties = {
+      title  = "ALB 5xxエラー数"
+      region = var.aws_region
+      metrics = [["AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count",
+        "LoadBalancer", var.alb_arn_suffix,
+        { stat = "Sum", period = 60 }
+      ]]
+      yAxis = { left = { min = 0 } }
+      annotations = {
+        horizontal = [{
+          value = var.alb_5xx_threshold
+          label = "閾値 ${var.alb_5xx_threshold}件/分"
+          color = "#ff6961"
+        }]
+      }
+    }
+  }] : []
+
+  # RDS CPU ウィジェット（rds_instance_identifier が空の場合はスキップ）
+  rds_widgets = var.rds_instance_identifier != "" ? [{
+    type   = "metric"
+    width  = 12
+    height = 6
+    properties = {
+      title  = "RDS CPU使用率 - ${var.rds_instance_identifier}"
+      region = var.aws_region
+      metrics = [["AWS/RDS", "CPUUtilization",
+        "DBInstanceIdentifier", var.rds_instance_identifier,
+        { stat = "Average", period = 300 }
+      ]]
+      yAxis = { left = { min = 0, max = 100 } }
+      annotations = {
+        horizontal = [{
+          value = var.rds_cpu_threshold
+          label = "閾値 ${var.rds_cpu_threshold}%"
+          color = "#ff6961"
+        }]
+      }
+    }
+  }] : []
+
+  # 全ウィジェットを結合（テキストヘッダー + EC2 + ALB + RDS）
+  dashboard_widgets = concat(
+    [{
+      type   = "text"
+      width  = 24
+      height = 3
+      properties = {
+        markdown = "# ${var.project_name}-${var.environment} 監視ダッシュボード\n\n監視対象: EC2 / ALB / RDS"
+      }
+    }],
+    local.ec2_cpu_widgets,
+    local.alb_widgets,
+    local.rds_widgets,
+  )
+}
+
 # ── 1. SNS トピック ────────────────────────────────────────
 resource "aws_sns_topic" "alert" {
   name = "${var.project_name}-${var.environment}-alert"
+  # AWS マネージドキーで保存データを暗号化（CKV_AWS_26 / 追加コストなし）
+  kms_master_key_id = "alias/aws/sns"
 }
 
 # メールサブスクリプション
@@ -271,16 +359,6 @@ resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-${var.environment}-dashboard"
 
   dashboard_body = jsonencode({
-    widgets = [
-      {
-        type = "text"
-        properties = {
-          markdown = "# ${var.project_name}-${var.environment} 監視ダッシュボード\n\n監視対象: EC2 / ALB / RDS"
-        }
-      }
-      # TODO: EC2 CPU グラフウィジェットを追加する
-      # TODO: ALB リクエスト数・5xx グラフを追加する
-      # TODO: RDS CPU・接続数グラフを追加する
-    ]
+    widgets = local.dashboard_widgets
   })
 }
