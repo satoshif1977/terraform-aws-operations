@@ -11,6 +11,7 @@ data "aws_caller_identity" "current" {}
 # ── 1. GuardDuty ─────────────────────────────────────────
 
 resource "aws_guardduty_detector" "main" {
+  # checkov:skip=CKV2_AWS_3: スタンドアロンアカウントのため組織レベルの GuardDuty は不要
   enable = var.guardduty_enabled
 
   tags = {
@@ -83,6 +84,7 @@ data "archive_file" "guardduty_notifier" {
 }
 
 resource "aws_cloudwatch_log_group" "guardduty_notifier" {
+  # checkov:skip=CKV_AWS_158: dev/PoC 環境のため AWS 管理キーで十分（KMS CMK は本番のみ）
   name              = "/aws/lambda/${var.project_name}-${var.environment}-guardduty-notifier"
   retention_in_days = 30
 
@@ -94,6 +96,11 @@ resource "aws_cloudwatch_log_group" "guardduty_notifier" {
 }
 
 resource "aws_lambda_function" "guardduty_notifier" {
+  # checkov:skip=CKV_AWS_116: dev/PoC のため DLQ は不要
+  # checkov:skip=CKV_AWS_173: 環境変数は SNS ARN のみで機密情報なし・KMS 不要
+  # checkov:skip=CKV_AWS_115: dev/PoC のため同時実行数制限は不要
+  # checkov:skip=CKV_AWS_117: dev/PoC のためパブリック Lambda で十分（VPC 配置不要）
+  # checkov:skip=CKV_AWS_272: dev/PoC のためコード署名は不要
   function_name = "${var.project_name}-${var.environment}-guardduty-notifier"
   role          = aws_iam_role.guardduty_notifier.arn
   runtime       = "python3.13"
@@ -195,7 +202,12 @@ resource "aws_s3_bucket" "config_logs" {
   count = var.config_enabled ? 1 : 0
 
   # checkov:skip=CKV_AWS_21: バージョニングは aws_s3_bucket_versioning リソースで別途設定済み
-  # checkov:skip=CKV_AWS_144: dev/PoC 環境のためクロスリージョンレプリケーションは不要
+  # checkov:skip=CKV_AWS_144: dev/PoC のためクロスリージョンレプリケーションは不要
+  # checkov:skip=CKV2_AWS_6: パブリックアクセスブロックは aws_s3_bucket_public_access_block で別途設定済み
+  # checkov:skip=CKV2_AWS_61: ライフサイクルは aws_s3_bucket_lifecycle_configuration で別途設定済み
+  # checkov:skip=CKV_AWS_18: dev/PoC のためアクセスログは不要
+  # checkov:skip=CKV2_AWS_62: dev/PoC のためイベント通知は不要
+  # checkov:skip=CKV_AWS_145: dev/PoC のため AES256 で十分（KMS CMK は本番のみ）
 
   # アカウント ID をサフィックスに付けてグローバルユニークにする
   bucket        = "${var.project_name}-${var.environment}-config-logs-${data.aws_caller_identity.current.account_id}"
@@ -345,6 +357,7 @@ resource "aws_config_delivery_channel" "main" {
 
 # Recorder を有効化（Delivery Channel 設定後）
 resource "aws_config_configuration_recorder_status" "main" {
+  # checkov:skip=CKV2_AWS_45: コスト最適化のため必要なリソースのみ記録（全リソース記録は除外）
   count = var.config_enabled ? 1 : 0
 
   name       = aws_config_configuration_recorder.main[0].name
