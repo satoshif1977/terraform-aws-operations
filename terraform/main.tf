@@ -298,18 +298,28 @@ resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
 # AWS の課金異常を自動検知して SNS 通知する
 # サービス別の支出を監視し、急激なコスト増加をアラート
 
-# SNS トピックポリシー（Cost Explorer からの Publish を許可）
+# SNS トピックポリシー（Cost Explorer / EventBridge からの Publish を許可）
 resource "aws_sns_topic_policy" "cost_anomaly" {
   arn = aws_sns_topic.alert.arn
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "AllowCostAnomalyDetection"
-      Effect    = "Allow"
-      Principal = { Service = "costalerts.amazonaws.com" }
-      Action    = "SNS:Publish"
-      Resource  = aws_sns_topic.alert.arn
-    }]
+    Statement = [
+      {
+        Sid       = "AllowCostAnomalyDetection"
+        Effect    = "Allow"
+        Principal = { Service = "costalerts.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.alert.arn
+      },
+      {
+        # Security Hub findings → EventBridge → SNS の通知に必要
+        Sid       = "AllowEventBridge"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.alert.arn
+      }
+    ]
   })
 }
 

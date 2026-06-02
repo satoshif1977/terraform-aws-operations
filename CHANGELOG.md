@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-03
+
+### Added
+- **Security Hub 連携強化**（`terraform/security.tf`）
+  - GuardDuty findings を Security Hub に集約（`aws_securityhub_product_subscription.guardduty`）
+  - AWS Config findings を Security Hub に集約（`aws_securityhub_product_subscription.config`）
+  - Security Hub HIGH / CRITICAL findings → EventBridge → SNS 通知パイプライン追加
+    - フィルター: `Severity.Label = HIGH | CRITICAL` / `RecordState = ACTIVE` / `Workflow.Status = NEW`
+    - GuardDuty・Config・その他すべてのサービスの findings を一元通知
+- **SNS トピックポリシー更新**（`terraform/main.tf`）
+  - `events.amazonaws.com` からの Publish を許可（EventBridge → SNS 通知に必要）
+
 ## [1.6.0] - 2026-06-02
 
 ### Added

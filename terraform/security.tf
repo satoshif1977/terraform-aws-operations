@@ -195,6 +195,67 @@ resource "aws_securityhub_standards_subscription" "fsbp" {
   standards_arn = "arn:aws:securityhub:${var.aws_region}::standards/aws-foundational-security-best-practices/v/1.0.0"
 }
 
+# ── Security Hub 製品統合（GuardDuty / Config findings を Hub に集約）──
+
+# GuardDuty findings を Security Hub に集約
+# GuardDuty が検知した脅威を Security Hub のダッシュボードで一元管理できる
+resource "aws_securityhub_product_subscription" "guardduty" {
+  count = var.securityhub_enabled && var.guardduty_enabled ? 1 : 0
+
+  depends_on  = [aws_securityhub_account.main]
+  product_arn = "arn:aws:securityhub:${var.aws_region}::product/aws/guardduty"
+}
+
+# AWS Config findings を Security Hub に集約
+# Config のコンプライアンス違反を Security Hub で一元管理できる
+resource "aws_securityhub_product_subscription" "config" {
+  count = var.securityhub_enabled && var.config_enabled ? 1 : 0
+
+  depends_on  = [aws_securityhub_account.main]
+  product_arn = "arn:aws:securityhub:${var.aws_region}::product/aws/config"
+}
+
+# ── Security Hub Findings → EventBridge → SNS 通知パイプライン ──
+# GuardDuty・Config・その他すべての HIGH / CRITICAL findings を一元通知
+# （既存の GuardDuty 直接パイプラインとの違い: Hub 経由で全サービスの findings を統合通知）
+
+resource "aws_cloudwatch_event_rule" "securityhub_findings" {
+  count = var.securityhub_enabled ? 1 : 0
+
+  name        = "${var.project_name}-${var.environment}-securityhub-findings"
+  description = "Security Hub の HIGH / CRITICAL findings を SNS で通知"
+
+  event_pattern = jsonencode({
+    source      = ["aws.securityhub"]
+    detail-type = ["Security Hub Findings - Imported"]
+    detail = {
+      findings = {
+        Severity = {
+          Label = ["HIGH", "CRITICAL"]
+        }
+        RecordState = ["ACTIVE"]
+        Workflow = {
+          Status = ["NEW"]
+        }
+      }
+    }
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "securityhub_sns" {
+  count = var.securityhub_enabled ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.securityhub_findings[0].name
+  target_id = "securityhub-alert-sns"
+  arn       = aws_sns_topic.alert.arn
+}
+
 # ── 4. AWS Config ─────────────────────────────────────────
 
 # Config ログ保存用 S3 バケット
