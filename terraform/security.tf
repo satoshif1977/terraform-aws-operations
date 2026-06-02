@@ -194,6 +194,9 @@ resource "aws_securityhub_standards_subscription" "fsbp" {
 resource "aws_s3_bucket" "config_logs" {
   count = var.config_enabled ? 1 : 0
 
+  # checkov:skip=CKV_AWS_21: バージョニングは aws_s3_bucket_versioning リソースで別途設定済み
+  # checkov:skip=CKV_AWS_144: dev/PoC 環境のためクロスリージョンレプリケーションは不要
+
   # アカウント ID をサフィックスに付けてグローバルユニークにする
   bucket        = "${var.project_name}-${var.environment}-config-logs-${data.aws_caller_identity.current.account_id}"
   force_destroy = true # dev 環境での destroy を容易にするため true
@@ -211,6 +214,22 @@ resource "aws_s3_bucket_versioning" "config_logs" {
   bucket = aws_s3_bucket.config_logs[0].id
   versioning_configuration {
     status = "Enabled"
+  }
+}
+
+# CKV2_AWS_61: ライフサイクル設定（マルチパートアップロードの自動中断）
+resource "aws_s3_bucket_lifecycle_configuration" "config_logs" {
+  count = var.config_enabled ? 1 : 0
+
+  bucket = aws_s3_bucket.config_logs[0].id
+
+  rule {
+    id     = "abort-incomplete-multipart"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
 }
 

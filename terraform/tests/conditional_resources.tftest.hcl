@@ -24,9 +24,9 @@ mock_provider "aws" {
   }
   mock_resource "aws_lambda_function" {
     defaults = {
-      arn            = "arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function"
-      invoke_arn     = "arn:aws:apigateway:ap-northeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function/invocations"
-      qualified_arn  = "arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function:$LATEST"
+      arn           = "arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function"
+      invoke_arn    = "arn:aws:apigateway:ap-northeast-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function/invocations"
+      qualified_arn = "arn:aws:lambda:ap-northeast-1:123456789012:function:mock-function:$LATEST"
     }
   }
   mock_data "aws_caller_identity" {
