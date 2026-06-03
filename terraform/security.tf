@@ -327,7 +327,7 @@ resource "aws_s3_bucket_public_access_block" "config_logs" {
   restrict_public_buckets = true
 }
 
-# Config が S3 へ書き込むためのバケットポリシー
+# Config が S3 へ書き込むためのバケットポリシー（+ SSL 強制）
 resource "aws_s3_bucket_policy" "config_logs" {
   count = var.config_enabled ? 1 : 0
 
@@ -357,6 +357,22 @@ resource "aws_s3_bucket_policy" "config_logs" {
           StringEquals = {
             "s3:x-amz-acl"      = "bucket-owner-full-control"
             "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        # CKV_AWS_54: HTTP（非 SSL）リクエストを拒否してデータ転送を暗号化
+        Sid       = "DenyNonSSL"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.config_logs[0].arn,
+          "${aws_s3_bucket.config_logs[0].arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
           }
         }
       }
