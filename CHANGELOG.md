@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-03
+
+### Security
+- **S3 バケットポリシー強化**（`terraform/security.tf`）
+  - config_logs バケットポリシーに `DenyNonSSL` ステートメントを追加
+  - HTTP（非 SSL）リクエストを全プリンシパルに対して Deny（CKV_AWS_54 対応）
+  - データ転送の暗号化を強制し、中間者攻撃を防止
+
 ## [1.7.0] - 2026-06-03
 
 ### Added
