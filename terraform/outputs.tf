@@ -50,3 +50,25 @@ output "config_s3_bucket" {
   description = "AWS Config ログ保存 S3 バケット名"
   value       = var.config_enabled ? aws_s3_bucket.config_logs[0].bucket : null
 }
+
+# ── DynamoDB Streams Outputs ──────────────────────────────
+
+output "incidents_table_name" {
+  description = "インシデント記録 DynamoDB テーブル名"
+  value       = var.streams_pipe_enabled ? aws_dynamodb_table.incidents[0].name : null
+}
+
+output "incidents_stream_arn" {
+  description = "インシデントテーブル DynamoDB Stream ARN"
+  value       = var.streams_pipe_enabled ? aws_dynamodb_table.incidents[0].stream_arn : null
+}
+
+output "streams_alert_function_name" {
+  description = "DynamoDB Streams アラート Lambda 関数名"
+  value       = var.streams_pipe_enabled ? aws_lambda_function.streams_alert[0].function_name : null
+}
+
+output "streams_pipe_name" {
+  description = "DynamoDB Streams → Lambda EventBridge Pipes 名"
+  value       = var.streams_pipe_enabled ? aws_pipes_pipe.streams_alert[0].name : null
+}

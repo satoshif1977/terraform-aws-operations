@@ -130,3 +130,10 @@ variable "config_enabled" {
   type        = bool
   default     = true
 }
+
+# ── DynamoDB Streams → Pipes ──────────────────────────────
+variable "streams_pipe_enabled" {
+  description = "DynamoDB Streams → EventBridge Pipes → アラート Lambda パイプラインを有効化するか"
+  type        = bool
+  default     = true
+}
