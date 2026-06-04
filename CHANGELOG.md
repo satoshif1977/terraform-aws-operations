@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-04
+
+### Added
+- **DynamoDB Streams → EventBridge Pipes → アラート Lambda パイプライン**（`terraform/streams.tf`）
+  - `aws_dynamodb_table.incidents`: インシデント記録テーブル（PITR・SSE・Streams 有効）
+    - PK: `incident_id`（String）/ SK: `timestamp`（String）
+    - `stream_view_type = "NEW_AND_OLD_IMAGES"` でソース変更前後の値を取得
+  - `aws_pipes_pipe.streams_alert`: DynamoDB Streams → Lambda のパイプライン
+    - フィルター: `severity IN [HIGH, CRITICAL] AND status = OPEN` のレコードのみ Lambda を起動
+    - `batch_size=1` / `maximum_retry_attempts=2`（失敗時のリトライ制御）
+  - `aws_lambda_function.streams_alert`: フィルター通過レコードを整形して SNS へ通知
+  - IAM: Pipes 用（DynamoDB Streams 読み取り + Lambda 呼び出し）・Lambda 用（SNS Publish）を最小権限で作成
+- **インシデントアラート Lambda**（`lambda/streams-alert/index.py`）
+  - DynamoDB NewImage の AttributeValue（`{"S": "..."}` 形式）を自動デコード
+  - INSERT / MODIFY のみ処理・REMOVE はスキップ（変更理由なし通知を防止）
+  - 処理結果を `processed` / `skipped` / `errors` に分類して返却
+- **ユニットテスト追加**（`lambda/streams-alert/test_index.py`・11 件・全パス）
+  - CRITICAL INSERT 成功 / HIGH MODIFY 成功 / REMOVE スキップ / NewImage 空スキップ /
+    SNS エラー格納 / dict 形式 invoke 対応 / AttributeValue デコード / メッセージ生成
+- **outputs 追加**: `incidents_table_name` / `incidents_stream_arn` /
+  `streams_alert_function_name` / `streams_pipe_name`
+- **variables 追加**: `streams_pipe_enabled`（bool, default=true）
+- **`.gitignore` 更新**: `__pycache__/` / `*.pyc` / `.pytest_cache/` / `lambda/**/*.zip` / `.*.bkp` を追加
+
 ## [1.8.0] - 2026-06-03
 
 ### Security
