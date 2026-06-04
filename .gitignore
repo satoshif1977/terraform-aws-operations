@@ -5,3 +5,14 @@
 *.tfplan
 *.tfstate
 *.tfstate.backup
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Lambda 生成 ZIP
+lambda/**/*.zip
+
+# draw.io バックアップ
+.*.bkp
