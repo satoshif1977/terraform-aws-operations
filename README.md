@@ -288,6 +288,23 @@ terraform destroy
 
 ## ローカル開発・テスト方法
 
+### Python ユニットテスト（AWS 接続不要）
+
+Lambda 関数のロジックを boto3 モックで検証します。AWS 接続は不要です。
+
+```bash
+pip install pytest boto3 botocore
+pytest lambda/ -v
+```
+
+| テストファイル | テスト数 | 主な検証内容 |
+|---|---|---|
+| `lambda/guardduty-notifier/test_index.py` | 24 件 | Finding 整形・重大度判定・SNS 送信・エラーハンドリング |
+| `lambda/streams-alert/test_index.py` | 11 件 | DynamoDB Streams イベント処理・SNS 送信・エラーハンドリング |
+| **合計** | **35 件** | |
+
+---
+
 ### Terraform の静的チェック（AWS 接続不要）
 
 ```bash

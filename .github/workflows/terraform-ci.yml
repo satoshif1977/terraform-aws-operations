@@ -91,6 +91,32 @@ jobs:
               body,
             });
 
+  python-test:
+    name: Python ユニットテスト
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      AWS_DEFAULT_REGION: ap-northeast-1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install test deps
+        run: pip install pytest boto3 botocore pytest-cov
+
+      - name: pytest guardduty-notifier（24件）
+        run: pytest lambda/guardduty-notifier/test_index.py -v --cov=lambda/guardduty-notifier --cov-report=xml:coverage-guardduty.xml
+
+      - name: pytest streams-alert（11件）
+        run: pytest lambda/streams-alert/test_index.py -v --cov=lambda/streams-alert --cov-report=xml:coverage-streams.xml
+
   security:
     name: Checkov セキュリティスキャン
     runs-on: ubuntu-latest
