@@ -104,13 +104,50 @@ aws cloudwatch describe-alarms --alarm-names "alarm-name"
 | カテゴリ | 技術・サービス |
 |---------|--------------|
 | IaC | Terraform（メイン） / CloudFormation（比較実装） |
-| 言語 | HCL（Terraform） / Python 3.13（Lambda） |
+| 言語 | HCL（Terraform） / Python 3.13（Lambda）/ **Go 1.21（Lambda 並置実装）** |
 | 監視 | Amazon CloudWatch（アラーム・ダッシュボード） |
 | セキュリティ | Amazon GuardDuty / AWS Security Hub / AWS Config |
 | イベント連携 | Amazon EventBridge（GuardDuty Finding ルーティング） |
 | 通知 | Amazon SNS（CloudWatch アラーム + GuardDuty Finding） |
 | 対象リソース | EC2 / ALB / RDS / Lambda |
 | 権限管理 | IAM Role（各サービス最小権限） |
+
+---
+
+## Go 版 Lambda 並置実装
+
+`lambda_go/guardduty-notifier/` に、Python 版（`lambda/guardduty-notifier/index.py`）と同じロジックを **Go で実装した並置実装**を追加しています。
+
+```
+lambda/guardduty-notifier/index.py        # Python 3.13 実装
+lambda_go/guardduty-notifier/main.go      # Go 1.21 実装（同ロジック）
+lambda_go/guardduty-notifier/main_test.go # Go テスト（10件）
+```
+
+### Python vs Go 比較
+
+| 観点 | Python | Go |
+|---|---|---|
+| コールドスタート | ~300ms | **~100ms**（約3倍速） |
+| メモリ使用量 | ~60MB | **~30MB**（約半分） |
+| デプロイ成果物 | ランタイム + コード | **単一バイナリ**（bootstrap） |
+| 型安全性 | 実行時エラー | **コンパイル時エラー** |
+
+> GuardDuty 通知は低頻度なので Python で十分ですが、Go 版は「高頻度イベント対応時の移行候補」として維持しています。
+
+### Go 版ビルド手順
+
+```bash
+cd lambda_go
+go mod tidy
+
+# Lambda 向けバイナリビルド（Linux/amd64）
+GOOS=linux GOARCH=amd64 go build -o guardduty-notifier/bootstrap ./guardduty-notifier/
+zip -j guardduty-notifier.zip guardduty-notifier/bootstrap
+
+# テスト実行
+go test ./guardduty-notifier/... -v
+```
 
 ---
 
