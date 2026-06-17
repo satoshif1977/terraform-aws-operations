@@ -13,6 +13,7 @@ resource "aws_dynamodb_table" "incidents" {
   count = var.streams_pipe_enabled ? 1 : 0
 
   # checkov:skip=CKV_AWS_47: dev 環境のため削除保護は無効（terraform destroy を容易にするため）
+  # checkov:skip=CKV_AWS_300: Checkov 3.x バグ - S3 ライフサイクルチェックが DynamoDB リソースに誤適用される
   name         = "${var.project_name}-${var.environment}-incidents"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "incident_id"
