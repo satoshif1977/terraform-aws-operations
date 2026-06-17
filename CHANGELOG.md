@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-17
+
+### Added
+- **Go 版 guardduty-notifier 並置実装**（`lambda_go/guardduty-notifier/`）
+  - Python 版と同じロジックを Go 1.21 で実装（aws-lambda-go / aws-sdk-go-v2）
+  - `SNSPublisher` インターフェースによるモック可能設計
+  - Go ユニットテスト 10 件（FindingType / Severity / SNS エラー / 件名 100 文字制限 等）
+- **Python pytest CI ジョブ追加**（`terraform-ci.yml`）
+  - `pytest lambda/guardduty-notifier/` 24 件 + `pytest lambda/streams-alert/` 11 件
+  - push / PR で自動実行（CI 合計テスト: Python 35 件 + Go 10 件 + Terraform test 17 件）
+- **Go Test ワークフロー追加**（`.github/workflows/go-test.yml`）
+  - `lambda_go/**` 変更時に `go test ./... -v` を自動実行
+- **`actions/setup-go` v5 → v6 更新**（Dependabot PR#8）
+
+### Fixed
+- **Terraform test mock 修正**: `aws_dynamodb_table`（`stream_arn`）・`aws_pipes_pipe`（`arn`）を
+  全 3 テストファイルに追加（EventBridge Pipes の source ARN バリデーションエラーを解消）
+- **Checkov CKV_AWS_119 スキップ追加**（DynamoDB KMS CMK - dev/PoC は AWS 管理キーで十分）
+- **Checkov CKV_AWS_300 スキップ追加**（Checkov 3.x バグ - S3 チェックが DynamoDB に誤適用）
+
 ## [1.9.0] - 2026-06-04
 
 ### Added
