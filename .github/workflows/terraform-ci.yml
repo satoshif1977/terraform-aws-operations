@@ -136,6 +136,7 @@ jobs:
           soft_fail: false
           # SNS KMS（alias/aws/sns）は修正済み（CKV_AWS_26）
           # 以下は dev/PoC として意図的に省略
+          # CKV_AWS_300: Checkov 3.x バグ - S3 ライフサイクルチェックが DynamoDB に誤適用・インライン skip 未対応
           skip_check: >-
-            CKV_AWS_91,CKV_AWS_118,CKV_AWS_338
+            CKV_AWS_91,CKV_AWS_118,CKV_AWS_338,CKV_AWS_300
           output_format: cli
