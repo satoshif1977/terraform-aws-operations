@@ -36,6 +36,11 @@ mock_provider "aws" {
       stream_arn = "arn:aws:dynamodb:ap-northeast-1:123456789012:table/mock-incidents/stream/2026-01-01T00:00:00.000"
     }
   }
+  mock_resource "aws_pipes_pipe" {
+    defaults = {
+      arn = "arn:aws:pipes:ap-northeast-1:123456789012:pipe/mock-streams-alert"
+    }
+  }
   mock_data "aws_caller_identity" {
     defaults = {
       account_id = "123456789012"
