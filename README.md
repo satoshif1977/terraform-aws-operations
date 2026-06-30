@@ -108,7 +108,7 @@ aws cloudwatch describe-alarms --alarm-names "alarm-name"
 | カテゴリ | 技術・サービス |
 |---------|--------------|
 | IaC | Terraform（メイン） / CloudFormation（比較実装） |
-| 言語 | HCL（Terraform） / Python 3.13（Lambda）/ **Go 1.21（Lambda 並置実装）** |
+| 言語 | HCL（Terraform） / Python 3.13（Lambda）/ **Go 1.21（Lambda 並置実装）** / **TypeScript（Lambda 並置実装）** |
 | 監視 | Amazon CloudWatch（アラーム・ダッシュボード） |
 | セキュリティ | Amazon GuardDuty / AWS Security Hub / AWS Config |
 | イベント連携 | Amazon EventBridge（GuardDuty Finding ルーティング） |
@@ -187,8 +187,20 @@ terraform-aws-operations/
 │       ├── conditional_resources.tftest.hcl
 │       └── naming.tftest.hcl
 ├── lambda/
+│   ├── guardduty-notifier/
+│   │   └── index.py         # GuardDuty Finding → SNS 通知 Lambda（Python）
+│   └── streams-alert/
+│       └── index.py         # DynamoDB Streams → SNS 通知 Lambda（Python）
+├── lambda_go/
 │   └── guardduty-notifier/
-│       └── index.py         # GuardDuty Finding → SNS 通知 Lambda（Python）
+│       ├── main.go          # GuardDuty 通知 Go 並置実装
+│       ├── main_test.go     # Go テスト（10件）
+│       └── go.mod
+├── lambda_ts/
+│   └── streams-alert/
+│       ├── index.ts         # DynamoDB Streams → SNS 通知 TypeScript 並置実装
+│       ├── index.test.ts    # Jest テスト（34件・createHandler DI パターン）
+│       └── types.ts         # 型定義（DynamoDBAttributeValue / HandlerResult）
 ├── cloudformation/          # CloudFormation 版（Terraform との比較用）
 │   ├── template.yaml        # 同等監視構成の CFn テンプレート
 │   └── README.md            # デプロイ手順・Terraform との差異比較
@@ -343,6 +355,23 @@ pytest lambda/ -v
 | `lambda/guardduty-notifier/test_index.py` | 24 件 | Finding 整形・重大度判定・SNS 送信・エラーハンドリング |
 | `lambda/streams-alert/test_index.py` | 11 件 | DynamoDB Streams イベント処理・SNS 送信・エラーハンドリング |
 | **合計** | **35 件** | |
+
+### Go テスト（AWS 接続不要）
+
+```bash
+cd lambda_go/guardduty-notifier
+go test ./... -v
+# 10件 PASS（GuardDuty Finding パース・SNS 送信ロジック）
+```
+
+### TypeScript テスト（AWS 接続不要）
+
+```bash
+cd lambda_ts/streams-alert
+npm ci
+npx jest
+# 34件 PASS（INSERT/MODIFY/REMOVE フィルタ・SNS 送信・エラーハンドリング）
+```
 
 ---
 
