@@ -2,8 +2,10 @@
 
 ![Terraform CI](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml/badge.svg)
 ![Go Test](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/go-test.yml/badge.svg)
+[![TypeScript Test](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/ts-test.yml/badge.svg)](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/ts-test.yml)
 ![Terraform](https://img.shields.io/badge/Terraform-623CE4?style=flat&logo=terraform&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-1.21-00ADD8?style=flat&logo=go&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
 ![CloudFormation](https://img.shields.io/badge/CloudFormation-FF4F00?style=flat&logo=amazon-aws&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazon-aws&logoColor=white)
 ![Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-orange?logo=anthropic)

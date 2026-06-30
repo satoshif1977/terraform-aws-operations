@@ -1,0 +1,36 @@
+name: TypeScript Test
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "lambda_ts/**"
+      - ".github/workflows/ts-test.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "lambda_ts/**"
+      - ".github/workflows/ts-test.yml"
+
+jobs:
+  ts-test:
+    name: TypeScript ユニットテスト
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    defaults:
+      run:
+        working-directory: lambda_ts/streams-alert
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: lambda_ts/streams-alert/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: jest
+        run: npm test

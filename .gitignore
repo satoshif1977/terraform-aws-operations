@@ -16,3 +16,7 @@ lambda/**/*.zip
 
 # draw.io バックアップ
 .*.bkp
+
+# Node.js
+node_modules/
+dist/
