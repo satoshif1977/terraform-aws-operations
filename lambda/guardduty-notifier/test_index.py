@@ -6,14 +6,16 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault("SNS_TOPIC_ARN", "arn:aws:sns:ap-northeast-1:123456789012:test-topic")
+os.environ.setdefault(
+    "SNS_TOPIC_ARN", "arn:aws:sns:ap-northeast-1:123456789012:test-topic"
+)
 os.environ.setdefault("AWS_DEFAULT_REGION", "ap-northeast-1")
 sys.path.insert(0, os.path.dirname(__file__))
 
 from index import build_message, get_severity_label, lambda_handler  # noqa: E402
 
-
 # ── get_severity_label のテスト ───────────────────────────────
+
 
 class TestGetSeverityLabel:
     def test_CRITICAL_9以上(self):
@@ -42,6 +44,7 @@ class TestGetSeverityLabel:
 
 
 # ── build_message のテスト ────────────────────────────────────
+
 
 def _make_detail(
     severity: float = 7.5,
@@ -97,7 +100,9 @@ class TestBuildMessage:
         assert "console.aws.amazon.com/guardduty" in message
 
     def test_本文にタイプが含まれる(self):
-        _, message = build_message(_make_detail(finding_type="UnauthorizedAccess:EC2/SSHBruteForce"))
+        _, message = build_message(
+            _make_detail(finding_type="UnauthorizedAccess:EC2/SSHBruteForce")
+        )
         assert "UnauthorizedAccess:EC2/SSHBruteForce" in message
 
     def test_本文に説明が含まれる(self):
@@ -116,6 +121,7 @@ class TestBuildMessage:
 
 
 # ── lambda_handler のテスト ───────────────────────────────────
+
 
 class TestLambdaHandler:
     @patch("index.sns")

@@ -23,6 +23,7 @@ SNS_TOPIC_ARN: str = os.environ["SNS_TOPIC_ARN"]
 
 # ── 重大度ラベル ─────────────────────────────────────────────
 
+
 def get_severity_label(severity: float) -> str:
     """GuardDuty の数値重大度を日本語ラベルに変換する。"""
     if severity >= 9.0:
@@ -36,6 +37,7 @@ def get_severity_label(severity: float) -> str:
 
 
 # ── メッセージ整形 ───────────────────────────────────────────
+
 
 def build_message(detail: dict) -> tuple[str, str]:
     """
@@ -63,32 +65,35 @@ def build_message(detail: dict) -> tuple[str, str]:
         f"?region={region}#/findings?macros=current&fId={finding_id}"
     )
 
-    message = "\n".join([
-        f"GuardDuty セキュリティアラート",
-        f"{'=' * 50}",
-        f"",
-        f"重大度  : {severity} {severity_label}",
-        f"タイプ  : {finding_type}",
-        f"タイトル: {title}",
-        f"",
-        f"説明:",
-        f"  {description}",
-        f"",
-        f"{'─' * 50}",
-        f"リージョン  : {region}",
-        f"アカウント  : {account_id}",
-        f"Finding ID  : {finding_id}",
-        f"",
-        f"コンソールで確認:",
-        f"  {console_url}",
-        f"",
-        f"-- 自動通知: terraform-aws-operations / guardduty-notifier",
-    ])
+    message = "\n".join(
+        [
+            "GuardDuty セキュリティアラート",
+            f"{'=' * 50}",
+            "",
+            f"重大度  : {severity} {severity_label}",
+            f"タイプ  : {finding_type}",
+            f"タイトル: {title}",
+            "",
+            "説明:",
+            f"  {description}",
+            "",
+            f"{'─' * 50}",
+            f"リージョン  : {region}",
+            f"アカウント  : {account_id}",
+            f"Finding ID  : {finding_id}",
+            "",
+            "コンソールで確認:",
+            f"  {console_url}",
+            "",
+            "-- 自動通知: terraform-aws-operations / guardduty-notifier",
+        ]
+    )
 
     return subject, message
 
 
 # ── ハンドラー ───────────────────────────────────────────────
+
 
 def lambda_handler(event: dict, context: object) -> dict:
     """

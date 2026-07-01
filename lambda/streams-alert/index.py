@@ -44,9 +44,9 @@ SNS_TOPIC_ARN: str = os.environ["SNS_TOPIC_ARN"]
 # ── 重大度ラベル ──────────────────────────────────────────────────────
 SEVERITY_LABEL: dict[str, str] = {
     "CRITICAL": "[CRITICAL]",
-    "HIGH":     "[HIGH]",
-    "MEDIUM":   "[MEDIUM]",
-    "LOW":      "[LOW]",
+    "HIGH": "[HIGH]",
+    "MEDIUM": "[MEDIUM]",
+    "LOW": "[LOW]",
 }
 
 # ── 処理対象イベント ──────────────────────────────────────────────────
@@ -54,6 +54,7 @@ PROCESSABLE_EVENTS = frozenset({"INSERT", "MODIFY"})
 
 
 # ── ヘルパー ──────────────────────────────────────────────────────────
+
 
 def _extract_dynamo_value(attr: dict[str, Any]) -> str:
     """DynamoDB AttributeValue（{"S": "..."} 形式）から文字列値を取り出す。"""
@@ -74,38 +75,41 @@ def _build_message(new_image: dict[str, Any]) -> tuple[str, str]:
         (subject, message) のタプル
     """
     incident_id = _extract_dynamo_value(new_image.get("incident_id", {"S": "UNKNOWN"}))
-    timestamp   = _extract_dynamo_value(new_image.get("timestamp",   {"S": "UNKNOWN"}))
-    severity    = _extract_dynamo_value(new_image.get("severity",    {"S": "UNKNOWN"}))
-    status      = _extract_dynamo_value(new_image.get("status",      {"S": "UNKNOWN"}))
-    message     = _extract_dynamo_value(new_image.get("message",     {"S": "（詳細なし）"}))
-    resource    = _extract_dynamo_value(new_image.get("resource",    {"S": "（不明）"}))
+    timestamp = _extract_dynamo_value(new_image.get("timestamp", {"S": "UNKNOWN"}))
+    severity = _extract_dynamo_value(new_image.get("severity", {"S": "UNKNOWN"}))
+    status = _extract_dynamo_value(new_image.get("status", {"S": "UNKNOWN"}))
+    message = _extract_dynamo_value(new_image.get("message", {"S": "（詳細なし）"}))
+    resource = _extract_dynamo_value(new_image.get("resource", {"S": "（不明）"}))
 
     label = SEVERITY_LABEL.get(severity, f"[{severity}]")
     subject = f"[インシデント] {label} {incident_id[:50]}"
 
-    body = "\n".join([
-        "インシデントアラート",
-        "=" * 50,
-        "",
-        f"インシデントID: {incident_id}",
-        f"重大度        : {severity} {label}",
-        f"ステータス    : {status}",
-        f"発生時刻      : {timestamp}",
-        "",
-        "対象リソース:",
-        f"  {resource}",
-        "",
-        "詳細:",
-        f"  {message}",
-        "",
-        "─" * 50,
-        "-- 自動通知: terraform-aws-operations / streams-alert",
-    ])
+    body = "\n".join(
+        [
+            "インシデントアラート",
+            "=" * 50,
+            "",
+            f"インシデントID: {incident_id}",
+            f"重大度        : {severity} {label}",
+            f"ステータス    : {status}",
+            f"発生時刻      : {timestamp}",
+            "",
+            "対象リソース:",
+            f"  {resource}",
+            "",
+            "詳細:",
+            f"  {message}",
+            "",
+            "─" * 50,
+            "-- 自動通知: terraform-aws-operations / streams-alert",
+        ]
+    )
 
     return subject, body
 
 
 # ── ハンドラー ────────────────────────────────────────────────────────
+
 
 def handler(
     event: list[dict[str, Any]] | dict[str, Any],
@@ -138,12 +142,26 @@ def handler(
         # INSERT / MODIFY のみ処理（REMOVE はスキップ）
         if event_name not in PROCESSABLE_EVENTS:
             logger.info("eventName=%s をスキップ（対象外）", event_name)
-            skipped.append({"eventName": event_name, "status": "skipped", "reason": "non-target event"})
+            skipped.append(
+                {
+                    "eventName": event_name,
+                    "status": "skipped",
+                    "reason": "non-target event",
+                }
+            )
             continue
 
         if not new_image:
-            logger.warning("NewImage が空のレコードをスキップ: eventName=%s", event_name)
-            skipped.append({"eventName": event_name, "status": "skipped", "reason": "empty NewImage"})
+            logger.warning(
+                "NewImage が空のレコードをスキップ: eventName=%s", event_name
+            )
+            skipped.append(
+                {
+                    "eventName": event_name,
+                    "status": "skipped",
+                    "reason": "empty NewImage",
+                }
+            )
             continue
 
         try:
@@ -153,25 +171,37 @@ def handler(
                 Subject=subject[:100],  # SNS 件名は 100 文字制限
                 Message=body,
             )
-            incident_id = _extract_dynamo_value(new_image.get("incident_id", {"S": "UNKNOWN"}))
-            severity    = _extract_dynamo_value(new_image.get("severity",    {"S": "UNKNOWN"}))
+            incident_id = _extract_dynamo_value(
+                new_image.get("incident_id", {"S": "UNKNOWN"})
+            )
+            severity = _extract_dynamo_value(
+                new_image.get("severity", {"S": "UNKNOWN"})
+            )
             logger.info(
                 "SNS 通知成功: incident_id=%s severity=%s MessageId=%s",
-                incident_id, severity, response.get("MessageId"),
+                incident_id,
+                severity,
+                response.get("MessageId"),
             )
-            processed.append({
-                "incident_id": incident_id,
-                "severity": severity,
-                "status": "success",
-                "message_id": response.get("MessageId"),
-            })
+            processed.append(
+                {
+                    "incident_id": incident_id,
+                    "severity": severity,
+                    "status": "success",
+                    "message_id": response.get("MessageId"),
+                }
+            )
 
         except Exception as e:
-            logger.error("SNS 通知エラー: record=%s error=%s", json.dumps(record, default=str), e)
+            logger.error(
+                "SNS 通知エラー: record=%s error=%s", json.dumps(record, default=str), e
+            )
             errors.append({"status": "error", "reason": str(e)})
 
     logger.info(
         "処理完了: 成功=%d / スキップ=%d / エラー=%d",
-        len(processed), len(skipped), len(errors),
+        len(processed),
+        len(skipped),
+        len(errors),
     )
     return {"processed": processed, "skipped": skipped, "errors": errors}

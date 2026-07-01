@@ -7,13 +7,15 @@ import sys
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("AWS_REGION", "ap-northeast-1")
-os.environ.setdefault("SNS_TOPIC_ARN", "arn:aws:sns:ap-northeast-1:123456789012:test-alert")
+os.environ.setdefault(
+    "SNS_TOPIC_ARN", "arn:aws:sns:ap-northeast-1:123456789012:test-alert"
+)
 sys.path.insert(0, os.path.dirname(__file__))
 
 from index import _build_message, _extract_dynamo_value, handler  # noqa: E402
 
-
 # ── ヘルパー ──────────────────────────────────────────────────────────
+
 
 def _make_dynamo_record(
     event_name: str = "INSERT",
@@ -37,16 +39,17 @@ def _make_dynamo_record(
     if include_new_image:
         record["dynamodb"]["NewImage"] = {
             "incident_id": {"S": incident_id},
-            "severity":    {"S": severity},
-            "status":      {"S": status},
-            "message":     {"S": message},
-            "resource":    {"S": resource},
-            "timestamp":   {"S": timestamp},
+            "severity": {"S": severity},
+            "status": {"S": status},
+            "message": {"S": message},
+            "resource": {"S": resource},
+            "timestamp": {"S": timestamp},
         }
     return record
 
 
 # ── _extract_dynamo_value のテスト ────────────────────────────────────
+
 
 class TestExtractDynamoValue:
     def test_文字列型を返す(self):
@@ -61,15 +64,16 @@ class TestExtractDynamoValue:
 
 # ── _build_message のテスト ───────────────────────────────────────────
 
+
 class TestBuildMessage:
     def test_CRITICAL件名にCRITICALラベルが含まれる(self):
         new_image = {
             "incident_id": {"S": "inc-001"},
-            "severity":    {"S": "CRITICAL"},
-            "status":      {"S": "OPEN"},
-            "message":     {"S": "テスト"},
-            "resource":    {"S": "i-abc"},
-            "timestamp":   {"S": "2026-06-04T10:00:00Z"},
+            "severity": {"S": "CRITICAL"},
+            "status": {"S": "OPEN"},
+            "message": {"S": "テスト"},
+            "resource": {"S": "i-abc"},
+            "timestamp": {"S": "2026-06-04T10:00:00Z"},
         }
         subject, body = _build_message(new_image)
 
@@ -81,8 +85,8 @@ class TestBuildMessage:
     def test_HIGH件名にHIGHラベルが含まれる(self):
         new_image = {
             "incident_id": {"S": "inc-002"},
-            "severity":    {"S": "HIGH"},
-            "status":      {"S": "OPEN"},
+            "severity": {"S": "HIGH"},
+            "status": {"S": "OPEN"},
         }
         subject, _ = _build_message(new_image)
 
@@ -90,6 +94,7 @@ class TestBuildMessage:
 
 
 # ── handler のテスト ─────────────────────────────────────────────────
+
 
 class TestHandler:
     @patch("index.sns")
