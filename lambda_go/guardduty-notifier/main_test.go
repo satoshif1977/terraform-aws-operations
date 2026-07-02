@@ -192,3 +192,117 @@ func TestHandleRequest_SNSエラーは伝播する(t *testing.T) {
 		t.Errorf("error message mismatch: %v", err)
 	}
 }
+
+func TestHandleRequest_本文にSeverityが含まれる(t *testing.T) {
+	mock := &mockSNS{}
+	snsClient = mock
+	t.Setenv("SNS_TOPIC_ARN", "arn:aws:sns:ap-northeast-1:123:test-topic")
+
+	detail := makeDetail(7.0, "Title", "Desc", "Type", "ap-northeast-1", "123", "id-4")
+	HandleRequest(context.Background(), makeEvent(detail))
+
+	if !strings.Contains(*mock.publishedInput.Message, "7.0") {
+		t.Errorf("message should contain severity value 7.0")
+	}
+}
+
+func TestHandleRequest_CriticalEventは200を返す(t *testing.T) {
+	mock := &mockSNS{}
+	snsClient = mock
+	t.Setenv("SNS_TOPIC_ARN", "arn:aws:sns:ap-northeast-1:123:test-topic")
+
+	detail := makeDetail(9.5, "Backdoor:EC2/XORDDOS", "深刻な脅威", "Backdoor", "ap-northeast-1", "123456789012", "find-critical")
+	resp, err := HandleRequest(context.Background(), makeEvent(detail))
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("statusCode = %d, want 200", resp.StatusCode)
+	}
+}
+
+// ── ユーティリティ関数の直接テスト ───────────────────────────────
+
+func TestGetString_MissingKey(t *testing.T) {
+	m := map[string]interface{}{"key": "value"}
+	got := getString(m, "missing")
+	if got != "" {
+		t.Errorf("missing key should return empty string, got %q", got)
+	}
+}
+
+func TestGetString_NonStringValue(t *testing.T) {
+	m := map[string]interface{}{"num": 42}
+	got := getString(m, "num")
+	if got != "" {
+		t.Errorf("non-string value should return empty string, got %q", got)
+	}
+}
+
+func TestGetFloat64_IntValue(t *testing.T) {
+	m := map[string]interface{}{"severity": int(7)}
+	got := getFloat64(m, "severity")
+	if got != 7.0 {
+		t.Errorf("int value should be converted to float64: want 7.0, got %f", got)
+	}
+}
+
+func TestGetFloat64_MissingKey(t *testing.T) {
+	m := map[string]interface{}{}
+	got := getFloat64(m, "missing")
+	if got != 0.0 {
+		t.Errorf("missing key should return 0.0, got %f", got)
+	}
+}
+
+func TestTruncate_ExactLength(t *testing.T) {
+	s := strings.Repeat("a", 60)
+	got := truncate(s, 60)
+	if got != s {
+		t.Errorf("exact length should not be truncated")
+	}
+}
+
+func TestTruncate_EmptyString(t *testing.T) {
+	got := truncate("", 10)
+	if got != "" {
+		t.Errorf("empty string truncation should return empty, got %q", got)
+	}
+}
+
+func TestBuildMessage_CriticalLabelInSubject(t *testing.T) {
+	detail := makeDetail(9.5, "Title", "Desc", "Type", "ap-northeast-1", "123", "id")
+	subject, _ := BuildMessage(detail)
+
+	if !strings.Contains(subject, "[CRITICAL]") {
+		t.Errorf("subject should contain [CRITICAL] for severity 9.5: %s", subject)
+	}
+}
+
+func TestBuildMessage_LowSeverityLabel(t *testing.T) {
+	detail := makeDetail(0.0, "Title", "Desc", "Type", "ap-northeast-1", "123", "id")
+	subject, _ := BuildMessage(detail)
+
+	if !strings.Contains(subject, "[LOW]") {
+		t.Errorf("subject should contain [LOW] for severity 0.0: %s", subject)
+	}
+}
+
+func TestBuildMessage_DescriptionInMessage(t *testing.T) {
+	detail := makeDetail(5.0, "Title", "不審なS3アクセスが検出されました", "Type", "ap-northeast-1", "123", "id")
+	_, message := BuildMessage(detail)
+
+	if !strings.Contains(message, "不審なS3アクセスが検出されました") {
+		t.Errorf("message should contain description text")
+	}
+}
+
+func TestBuildMessage_AccountIDInMessage(t *testing.T) {
+	detail := makeDetail(5.0, "Title", "Desc", "Type", "ap-northeast-1", "555666777888", "id")
+	_, message := BuildMessage(detail)
+
+	if !strings.Contains(message, "555666777888") {
+		t.Errorf("message should contain accountId: 555666777888")
+	}
+}

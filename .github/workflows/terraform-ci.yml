@@ -3,9 +3,9 @@ name: Terraform CI
 # main / master ブランチへの push と PR 時に実行
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 
 permissions:
   id-token: write      # OIDC トークン取得（AWS 認証）

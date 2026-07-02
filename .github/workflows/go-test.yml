@@ -2,9 +2,9 @@ name: Go Test
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 
 jobs:
   go-test:
@@ -28,6 +28,6 @@ jobs:
         run: go vet ./...
         working-directory: lambda_go
 
-      - name: go test guardduty-notifier（10件）
+      - name: go test guardduty-notifier（22件）
         run: go test ./guardduty-notifier/... -v -race
         working-directory: lambda_go
