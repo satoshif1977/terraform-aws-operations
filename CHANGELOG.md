@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-10
+
+### Added
+- `lambda_ts/streams-alert/`: TypeScript 版 streams-alert Lambda 並置実装
+  - Jest ユニットテスト 34 件（正常系・エラー系・型安全性検証）
+  - `.github/workflows/ts-test.yml`: TypeScript CI ワークフロー追加
+- `lambda_go/guardduty-notifier/main_test.go`: Go ユニットテスト 10 件 → 22 件に拡充（詳細ケース追加）
+- `.github/workflows/python-ci.yml`: Python CI 追加（ruff lint + black フォーマット + pytest）
+
+### Fixed
+- pytest 収集エラー修正（`lambda/` 配下の `conftest.py` 衝突を解消）
+
+### Changed
+- CI: `actions/checkout` v6 → v7
+
 ## [2.0.0] - 2026-06-17
 
 ### Added
