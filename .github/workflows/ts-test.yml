@@ -33,4 +33,11 @@ jobs:
       - name: typecheck
         run: npm run typecheck
       - name: jest
-        run: npm test
+        run: npm run test:coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: lambda_ts/streams-alert/coverage
+          flags: typescript
+          fail_ci_if_error: false

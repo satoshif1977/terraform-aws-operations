@@ -29,5 +29,12 @@ jobs:
         working-directory: lambda_go
 
       - name: go test guardduty-notifier（22件）
-        run: go test ./guardduty-notifier/... -v -race
+        run: go test ./guardduty-notifier/... -v -race -coverprofile=coverage.out -covermode=atomic
         working-directory: lambda_go
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lambda_go/coverage.out
+          flags: go
+          fail_ci_if_error: false

@@ -24,7 +24,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pytest ruff black boto3
+        run: pip install pytest pytest-cov ruff black boto3
 
       - name: ruff（構文チェック）
         run: ruff check lambda/
@@ -33,4 +33,10 @@ jobs:
         run: black --check lambda/
 
       - name: pytest
-        run: pytest lambda/ -v --tb=short
+        run: pytest lambda/ -v --tb=short --cov=lambda --cov-report=xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: python
+          fail_ci_if_error: false
