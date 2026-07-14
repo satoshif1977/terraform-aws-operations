@@ -58,6 +58,14 @@ describe('extractDynamoValue', () => {
   test('NULL 型は空文字を返す', () => {
     expect(extractDynamoValue({ NULL: true })).toBe('');
   });
+
+  test('L 型（リスト）は空文字を返す', () => {
+    expect(extractDynamoValue({ L: [] } as any)).toBe('');
+  });
+
+  test('M 型（マップ）は空文字を返す', () => {
+    expect(extractDynamoValue({ M: {} } as any)).toBe('');
+  });
 });
 
 // ── getSeverityLabel テスト ───────────────────────────────────
@@ -144,6 +152,16 @@ describe('buildMessage', () => {
     expect(subject).toContain('UNKNOWN');
     expect(body).toContain('（詳細なし）');
     expect(body).toContain('（不明）');
+  });
+
+  test('CRITICAL 重大度で件名に [CRITICAL] が含まれる', () => {
+    const { subject } = buildMessage({ ...newImage, severity: { S: 'CRITICAL' } });
+    expect(subject).toContain('[CRITICAL]');
+  });
+
+  test('本文にステータスが含まれる', () => {
+    const { body } = buildMessage({ ...newImage, status: { S: 'IN_PROGRESS' } });
+    expect(body).toContain('IN_PROGRESS');
   });
 });
 
@@ -275,6 +293,52 @@ describe('createHandler', () => {
 
     expect(result.processed).toHaveLength(2);
     expect(result.skipped).toHaveLength(2);
+  });
+
+  test('全件 REMOVE バッチは processed=0・skipped=全件になる', async () => {
+    const { client, send } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const result = await testHandler([makeRecord('REMOVE'), makeRecord('REMOVE'), makeRecord('REMOVE')]);
+
+    expect(send).not.toHaveBeenCalled();
+    expect(result.processed).toHaveLength(0);
+    expect(result.skipped).toHaveLength(3);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  test('5 件バッチを全件処理する', async () => {
+    const { client, send } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const records = Array.from({ length: 5 }, (_, i) =>
+      makeRecord('INSERT', { incident_id: `inc-00${i}` }),
+    );
+    const result = await testHandler(records);
+
+    expect(send).toHaveBeenCalledTimes(5);
+    expect(result.processed).toHaveLength(5);
+  });
+
+  test('全件 SNS エラーのバッチ → errors=全件', async () => {
+    const send = jest.fn().mockRejectedValue(new Error('SNS down'));
+    const testHandler = createHandler({ send } as unknown as SNSClient);
+    const result = await testHandler([makeRecord('INSERT'), makeRecord('INSERT')]);
+
+    expect(result.errors).toHaveLength(2);
+    expect(result.processed).toHaveLength(0);
+  });
+
+  test('空オブジェクトの NewImage はスキップされる', async () => {
+    const { client, send } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const emptyNewImageRecord: DynamoDBRecord = {
+      eventName: 'INSERT',
+      dynamodb: { NewImage: {} },
+    };
+    const result = await testHandler([emptyNewImageRecord]);
+
+    expect(send).not.toHaveBeenCalled();
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]?.reason).toBe('empty NewImage');
   });
 
   test('SNS エラーが 1 件あっても残りレコードの処理を続ける', async () => {
