@@ -28,7 +28,7 @@ jobs:
         run: go vet ./...
         working-directory: lambda_go
 
-      - name: go test guardduty-notifier（22件）
+      - name: go test guardduty-notifier（42件）
         run: go test ./guardduty-notifier/... -v -race -coverprofile=coverage.out -covermode=atomic
         working-directory: lambda_go
       - name: Upload coverage to Codecov
