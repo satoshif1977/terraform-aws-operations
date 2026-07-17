@@ -32,7 +32,7 @@ jobs:
         run: go test ./guardduty-notifier/... -v -race -coverprofile=coverage.out -covermode=atomic
         working-directory: lambda_go
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lambda_go/coverage.out
