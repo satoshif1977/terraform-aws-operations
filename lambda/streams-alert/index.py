@@ -192,7 +192,7 @@ def handler(
                 }
             )
 
-        except Exception as e:  # noqa: BLE001 – Lambda ハンドラーでは SNS 呼び出し失敗を握りつぶさず記録する
+        except Exception as e:  # noqa: BLE001
             logger.error(
                 "SNS 通知エラー: record=%s error=%s", json.dumps(record, default=str), e
             )
