@@ -12,7 +12,7 @@ os.environ.setdefault(
 os.environ.setdefault("AWS_DEFAULT_REGION", "ap-northeast-1")
 sys.path.insert(0, os.path.dirname(__file__))
 
-from index import build_message, get_severity_label, lambda_handler  # noqa: E402
+from index import build_message, get_severity_label, lambda_handler
 
 # ── get_severity_label のテスト ───────────────────────────────
 

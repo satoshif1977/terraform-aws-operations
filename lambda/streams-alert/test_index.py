@@ -12,7 +12,7 @@ os.environ.setdefault(
 )
 sys.path.insert(0, os.path.dirname(__file__))
 
-from index import _build_message, _extract_dynamo_value, handler  # noqa: E402
+from index import _build_message, _extract_dynamo_value, handler
 
 # ── ヘルパー ──────────────────────────────────────────────────────────
 
