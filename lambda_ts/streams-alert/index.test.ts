@@ -355,3 +355,304 @@ describe('createHandler', () => {
     expect(result.processed).toHaveLength(1);
   });
 });
+
+// ── extractDynamoValue / 追加エッジケース ─────────────────────────
+
+describe('extractDynamoValue / 追加エッジケース', () => {
+  test('S 型: 空文字列を返す', () => {
+    expect(extractDynamoValue({ S: '' })).toBe('');
+  });
+
+  test('S 型: 日本語文字列', () => {
+    expect(extractDynamoValue({ S: 'テスト文字列' })).toBe('テスト文字列');
+  });
+
+  test('S 型: 非常に長い文字列', () => {
+    const longStr = 'A'.repeat(10000);
+    expect(extractDynamoValue({ S: longStr })).toBe(longStr);
+  });
+
+  test('N 型: ゼロを返す', () => {
+    expect(extractDynamoValue({ N: '0' })).toBe('0');
+  });
+
+  test('N 型: 負数を返す', () => {
+    expect(extractDynamoValue({ N: '-100' })).toBe('-100');
+  });
+
+  test('N 型: 小数を返す', () => {
+    expect(extractDynamoValue({ N: '3.14' })).toBe('3.14');
+  });
+
+  test('S 型: 特殊文字を含む', () => {
+    expect(extractDynamoValue({ S: '<script>alert("xss")</script>' }))
+      .toBe('<script>alert("xss")</script>');
+  });
+
+  test('S 型: 改行を含む', () => {
+    expect(extractDynamoValue({ S: 'line1\nline2' })).toBe('line1\nline2');
+  });
+});
+
+// ── getSeverityLabel / 追加バリエーション ─────────────────────────
+
+describe('getSeverityLabel / 追加バリエーション', () => {
+  test('INFO → [INFO]（未定義ラベル）', () => {
+    expect(getSeverityLabel('INFO')).toBe('[INFO]');
+  });
+
+  test('WARNING → [WARNING]（未定義ラベル）', () => {
+    expect(getSeverityLabel('WARNING')).toBe('[WARNING]');
+  });
+
+  test('小文字 critical → [critical]（大文字小文字区別）', () => {
+    expect(getSeverityLabel('critical')).toBe('[critical]');
+  });
+
+  test('数値文字列 → [123]', () => {
+    expect(getSeverityLabel('123')).toBe('[123]');
+  });
+
+  test('特殊文字含む → [<alert>]', () => {
+    expect(getSeverityLabel('<alert>')).toBe('[<alert>]');
+  });
+
+  test('スペース含む → [ MEDIUM ]', () => {
+    expect(getSeverityLabel(' MEDIUM ')).toBe('[ MEDIUM ]');
+  });
+});
+
+// ── buildMessage / 追加パターン ───────────────────────────────────
+
+describe('buildMessage / 追加パターン', () => {
+  test('LOW 重大度で件名に [LOW] が含まれる', () => {
+    const { subject } = buildMessage({ severity: { S: 'LOW' } });
+    expect(subject).toContain('[LOW]');
+  });
+
+  test('MEDIUM 重大度で件名に [MEDIUM] が含まれる', () => {
+    const { subject } = buildMessage({ severity: { S: 'MEDIUM' } });
+    expect(subject).toContain('[MEDIUM]');
+  });
+
+  test('本文に区切り線が含まれる', () => {
+    const { body } = buildMessage({
+      incident_id: { S: 'inc-sep' },
+      severity: { S: 'HIGH' },
+    });
+    expect(body).toContain('='.repeat(50));
+  });
+
+  test('本文に重大度ラベルが含まれる', () => {
+    const { body } = buildMessage({
+      severity: { S: 'CRITICAL' },
+    });
+    expect(body).toContain('[CRITICAL]');
+  });
+
+  test('件名のプレフィックスが [インシデント] である', () => {
+    const { subject } = buildMessage({
+      incident_id: { S: 'inc-pfx' },
+      severity: { S: 'HIGH' },
+    });
+    expect(subject).toMatch(/^\[インシデント\]/);
+  });
+
+  test('N 型フィールドも extractDynamoValue で読み取られる', () => {
+    const { body } = buildMessage({
+      incident_id: { N: '12345' },
+      severity: { S: 'LOW' },
+    });
+    expect(body).toContain('12345');
+  });
+
+  test('BOOL 型フィールドは "true"/"false" に変換される', () => {
+    const { body } = buildMessage({
+      status: { BOOL: true },
+      severity: { S: 'LOW' },
+    });
+    expect(body).toContain('true');
+  });
+
+  test('全フィールド UNKNOWN 時の本文構造', () => {
+    const { body } = buildMessage({});
+    expect(body).toContain('インシデントID: UNKNOWN');
+    expect(body).toContain('重大度        : UNKNOWN');
+    expect(body).toContain('ステータス    : UNKNOWN');
+    expect(body).toContain('発生時刻      : UNKNOWN');
+  });
+});
+
+// ── createHandler / console 出力検証 ──────────────────────────────
+
+describe('createHandler / console 出力', () => {
+  let logSpy: jest.SpyInstance;
+  let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    logSpy = jest.spyOn(console, 'log').mockImplementation();
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    errorSpy = jest.spyOn(console, 'error').mockImplementation();
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  test('起動ログにレコード数が出力される', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    await testHandler([makeRecord('INSERT'), makeRecord('INSERT')]);
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('2 レコード'));
+  });
+
+  test('スキップログが出力される', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    await testHandler([makeRecord('REMOVE')]);
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('スキップ'));
+  });
+
+  test('空 NewImage で warn ログが出力される', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const record: DynamoDBRecord = { eventName: 'INSERT', dynamodb: { NewImage: {} } };
+    await testHandler([record]);
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('NewImage が空'));
+  });
+
+  test('SNS 成功ログに incident_id が含まれる', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    await testHandler([makeRecord('INSERT', { incident_id: 'inc-log' })]);
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('inc-log'));
+  });
+
+  test('SNS エラーログが出力される', async () => {
+    const send = jest.fn().mockRejectedValue(new Error('timeout'));
+    const testHandler = createHandler({ send } as unknown as SNSClient);
+    await testHandler([makeRecord('INSERT')]);
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('SNS 通知エラー'));
+  });
+
+  test('処理完了ログにカウントが含まれる', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    await testHandler([makeRecord('INSERT'), makeRecord('REMOVE')]);
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('成功=1'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('スキップ=1'));
+  });
+});
+
+// ── createHandler / SNS_TOPIC_ARN 環境変数 ────────────────────────
+
+describe('createHandler / SNS_TOPIC_ARN', () => {
+  const origEnv = process.env['SNS_TOPIC_ARN'];
+
+  afterEach(() => {
+    if (origEnv !== undefined) {
+      process.env['SNS_TOPIC_ARN'] = origEnv;
+    } else {
+      delete process.env['SNS_TOPIC_ARN'];
+    }
+  });
+
+  test('SNS_TOPIC_ARN が PublishCommand に渡される', async () => {
+    process.env['SNS_TOPIC_ARN'] = 'arn:aws:sns:ap-northeast-1:123456:test-topic';
+    const { client, send } = makeMockSNS();
+    const testHandler = createHandler(client);
+    await testHandler([makeRecord('INSERT')]);
+
+    const call = send.mock.calls[0]?.[0] as PublishCommand;
+    expect(call.input.TopicArn).toBe('arn:aws:sns:ap-northeast-1:123456:test-topic');
+  });
+
+  test('SNS_TOPIC_ARN が未定義でも処理は続行する', async () => {
+    delete process.env['SNS_TOPIC_ARN'];
+    const { client, send } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const result = await testHandler([makeRecord('INSERT')]);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.processed).toHaveLength(1);
+  });
+});
+
+// ── createHandler / eventName バリエーション ───────────────────────
+
+describe('createHandler / eventName バリエーション', () => {
+  test('空文字の eventName はスキップされる', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const record: DynamoDBRecord = {
+      eventName: '',
+      dynamodb: { NewImage: { incident_id: { S: 'inc-empty' } } },
+    };
+    const result = await testHandler([record]);
+
+    expect(result.skipped).toHaveLength(1);
+  });
+
+  test('大文字小文字混在 "Insert" はスキップされる', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const record: DynamoDBRecord = {
+      eventName: 'Insert',
+      dynamodb: { NewImage: { incident_id: { S: 'inc-case' } } },
+    };
+    const result = await testHandler([record]);
+
+    expect(result.skipped).toHaveLength(1);
+  });
+
+  test('未知の eventName "DELETE" はスキップされる', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const record: DynamoDBRecord = {
+      eventName: 'DELETE',
+      dynamodb: { NewImage: { incident_id: { S: 'inc-del' } } },
+    };
+    const result = await testHandler([record]);
+
+    expect(result.skipped).toHaveLength(1);
+  });
+});
+
+// ── createHandler / 大量レコード ──────────────────────────────────
+
+describe('createHandler / 大量レコード', () => {
+  test('10 件バッチを全件処理する', async () => {
+    const { client, send } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const records = Array.from({ length: 10 }, (_, i) =>
+      makeRecord('INSERT', { incident_id: `inc-${i}` }),
+    );
+    const result = await testHandler(records);
+
+    expect(send).toHaveBeenCalledTimes(10);
+    expect(result.processed).toHaveLength(10);
+  });
+
+  test('混在バッチ: INSERT 3 / MODIFY 2 / REMOVE 5', async () => {
+    const { client } = makeMockSNS();
+    const testHandler = createHandler(client);
+    const records = [
+      ...Array.from({ length: 3 }, () => makeRecord('INSERT')),
+      ...Array.from({ length: 2 }, () => makeRecord('MODIFY')),
+      ...Array.from({ length: 5 }, () => makeRecord('REMOVE')),
+    ];
+    const result = await testHandler(records);
+
+    expect(result.processed).toHaveLength(5);
+    expect(result.skipped).toHaveLength(5);
+  });
+});
