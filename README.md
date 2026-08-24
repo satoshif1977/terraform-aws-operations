@@ -1,7 +1,8 @@
 # terraform-aws-operations
 
-![Terraform CI](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml/badge.svg)
-![Go Test](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/go-test.yml/badge.svg)
+[![Terraform CI](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml/badge.svg)](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/terraform-ci.yml)
+[![Python Test](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/python-test.yml/badge.svg)](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/python-test.yml)
+[![Go Test](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/go-test.yml/badge.svg)](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/go-test.yml)
 [![TypeScript Test](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/ts-test.yml/badge.svg)](https://github.com/satoshif1977/terraform-aws-operations/actions/workflows/ts-test.yml)
 [![codecov](https://codecov.io/gh/satoshif1977/terraform-aws-operations/graph/badge.svg)](https://codecov.io/gh/satoshif1977/terraform-aws-operations)
 ![Terraform](https://img.shields.io/badge/Terraform-623CE4?style=flat&logo=terraform&logoColor=white)
