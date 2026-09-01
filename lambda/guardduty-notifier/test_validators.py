@@ -8,44 +8,35 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from validators import (
-    ValidationError,
-    # 定数
-    GUARDDUTY_EVENT_SOURCE,
     GUARDDUTY_DETAIL_TYPE,
-    MIN_SEVERITY,
+    GUARDDUTY_EVENT_SOURCE,
     MAX_SEVERITY,
-    SEVERITY_THRESHOLDS,
-    REQUIRED_DETAIL_FIELDS,
-    RECOMMENDED_DETAIL_FIELDS,
-    MAX_SNS_SUBJECT_LENGTH,
     MAX_SNS_MESSAGE_BYTES,
+    MAX_SNS_SUBJECT_LENGTH,
+    MIN_SEVERITY,
+    RECOMMENDED_DETAIL_FIELDS,
+    REQUIRED_DETAIL_FIELDS,
+    SEVERITY_THRESHOLDS,
     VALID_AWS_REGIONS,
-    # 重大度
-    is_valid_severity,
+    ValidationError,
     classify_severity,
+    format_errors,
+    has_errors,
     is_alertable_severity,
-    validate_severity,
-    # Finding Type
-    is_valid_finding_type,
-    validate_finding_type,
-    # AWS リソース
-    is_valid_region,
     is_known_region,
     is_valid_account_id,
-    validate_region,
+    is_valid_finding_type,
+    is_valid_region,
+    is_valid_severity,
     validate_account_id,
-    # EventBridge
     validate_event_envelope,
-    # Finding Detail
     validate_finding_detail,
-    # SNS
-    validate_sns_subject,
-    validate_sns_message,
-    # 統合
+    validate_finding_type,
     validate_guardduty_event,
-    # ユーティリティ
-    has_errors,
-    format_errors,
+    validate_region,
+    validate_severity,
+    validate_sns_message,
+    validate_sns_subject,
 )
 
 
