@@ -2,11 +2,6 @@
 GuardDuty Finding バリデーター ユニットテスト
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(__file__))
-
 from validators import (
     GUARDDUTY_DETAIL_TYPE,
     GUARDDUTY_EVENT_SOURCE,
@@ -38,7 +33,6 @@ from validators import (
     validate_sns_message,
     validate_sns_subject,
 )
-
 
 # ── ヘルパー ─────────────────────────────────────────────────
 
@@ -316,9 +310,7 @@ class TestValidateEventEnvelope:
         event = _make_event()
         event["detail-type"] = "Other Type"
         errors = validate_event_envelope(event)
-        assert any(
-            e.field == "detail-type" and e.severity == "warning" for e in errors
-        )
+        assert any(e.field == "detail-type" and e.severity == "warning" for e in errors)
 
     def test_sourceなしは許容(self):
         event = {"detail": _make_detail()}
