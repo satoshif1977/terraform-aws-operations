@@ -470,6 +470,4 @@ def format_errors(errors: list[ValidationError]) -> str:
     """エラーをフォーマットする。"""
     if not errors:
         return "すべてのチェックが通過しました"
-    return "\n".join(
-        f"[{e.severity.upper()}] {e.field}: {e.message}" for e in errors
-    )
+    return "\n".join(f"[{e.severity.upper()}] {e.field}: {e.message}" for e in errors)
