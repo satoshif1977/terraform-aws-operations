@@ -5,7 +5,8 @@ EventBridge 経由で受け取った GuardDuty Finding を整形して SNS へ�
 Python 版（lambda/guardduty-notifier/index.py）と同じロジックを Go で実装した並置実装。
 
 アーキテクチャ:
-  GuardDuty → EventBridge Rule (severity >= 4.0) → Lambda → SNS → Email
+
+	GuardDuty → EventBridge Rule (severity >= 4.0) → Lambda → SNS → Email
 */
 package main
 
@@ -43,6 +44,11 @@ type SNSPublisher interface {
 }
 
 var snsClient SNSPublisher
+
+// ── リトライ実行器 ───────────────────────────────────────────────
+// SNS のスロットリング（ThrottledException）等に指数バックオフ +
+// フルジッターで自動リトライする（retry.go を参照）
+var retrier = NewRetrier()
 
 func init() {
 	cfg, err := config.LoadDefaultConfig(context.Background())
@@ -162,10 +168,12 @@ func HandleRequest(ctx context.Context, event GuardDutyEvent) (Response, error) 
 	// SNS 件名は 100 文字制限
 	subjectStr := truncate(subject, 100)
 
-	out, err := snsClient.Publish(ctx, &sns.PublishInput{
-		TopicArn: aws.String(snsTopicARN),
-		Subject:  aws.String(subjectStr),
-		Message:  aws.String(message),
+	out, err := RetryValue(ctx, retrier, "Publish", func(c context.Context) (*sns.PublishOutput, error) {
+		return snsClient.Publish(c, &sns.PublishInput{
+			TopicArn: aws.String(snsTopicARN),
+			Subject:  aws.String(subjectStr),
+			Message:  aws.String(message),
+		})
 	})
 	if err != nil {
 		return Response{}, fmt.Errorf("SNS publish failed: %w", err)
