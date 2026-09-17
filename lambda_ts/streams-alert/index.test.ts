@@ -483,9 +483,12 @@ describe('buildMessage / 追加パターン', () => {
   });
 });
 
-// ── createHandler / console 出力検証 ──────────────────────────────
+// ── createHandler / 構造化ログ出力検証 ────────────────────────────
+//
+// logger.ts を経由するため、出力は 1 行の JSON になる。
+// メッセージ本文ではなく、Logs Insights で実際に検索するフィールド名を検証する。
 
-describe('createHandler / console 出力', () => {
+describe('createHandler / 構造化ログ出力', () => {
   let logSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
@@ -502,12 +505,12 @@ describe('createHandler / console 出力', () => {
     errorSpy.mockRestore();
   });
 
-  test('起動ログにレコード数が出力される', async () => {
+  test('起動ログに recordCount が出力される', async () => {
     const { client } = makeMockSNS();
     const testHandler = createHandler(client);
     await testHandler([makeRecord('INSERT'), makeRecord('INSERT')]);
 
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('2 レコード'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"recordCount":2'));
   });
 
   test('スキップログが出力される', async () => {
@@ -543,13 +546,14 @@ describe('createHandler / console 出力', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('SNS 通知エラー'));
   });
 
-  test('処理完了ログにカウントが含まれる', async () => {
+  test('処理完了ログに件数のフィールドが含まれる', async () => {
     const { client } = makeMockSNS();
     const testHandler = createHandler(client);
     await testHandler([makeRecord('INSERT'), makeRecord('REMOVE')]);
 
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('成功=1'));
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('スキップ=1'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"processed":1'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"skipped":1'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('"errors":0'));
   });
 });
 

@@ -5,12 +5,20 @@
 //   - SNSClient を依存注入（DI）することでユニットテストが容易
 //   - 処理対象イベントを Set<string> で定義し switch より可読性を向上
 //   - 同一ロジック・同一出力フォーマットで Python と動作を揃える
+//
+// ログとメトリクスは同ディレクトリの logger.ts / metrics.ts に寄せてある。
+// console を直接呼ばないのは、GuardDuty の検知内容がそのまま CloudWatch Logs に
+// 流れるため、logger.ts のマスキング（SENSITIVE_KEY_PATTERNS）を必ず通したいから。
 
 import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
 import type { DynamoDBRecord, HandlerResult, ProcessResult } from './types';
 import { PROCESSABLE_EVENTS, extractDynamoValue, getSeverityLabel, buildMessage } from './helpers';
 import { retryAsync } from './retry';
 import type { RetryConfig, RetryOptions } from './retry';
+import { createLoggerFromEnv, retryLogger } from './logger';
+import type { Logger } from './logger';
+import { createMetrics, retryMetrics } from './metrics';
+import type { Metrics } from './metrics';
 
 // ヘルパー関数を re-export（テストファイルが "./index" から import しているため）
 export { extractDynamoValue, getSeverityLabel, buildMessage };
@@ -32,6 +40,26 @@ export const SNS_RETRY_CONFIG: RetryConfig = {
   jitter: true,
 };
 
+// ── メトリクス設定 ────────────────────────────────────────────
+
+/** メトリクスの既定の名前空間。METRICS_NAMESPACE で上書きできる */
+export const DEFAULT_METRICS_NAMESPACE = 'TerraformAwsOperations/StreamsAlert';
+
+/** リトライ層に渡す操作名。ログとメトリクスで同じ値を使う */
+export const RETRY_OPERATION = 'sns:Publish';
+
+// ── 依存の注入 ────────────────────────────────────────────────
+
+/**
+ * ハンドラーが使う副次機能。テストから固定の sink を渡して出力を検証できる。
+ *
+ * 省略した場合は環境変数からロガーを、既定の名前空間でメトリクスを組み立てる。
+ */
+export interface HandlerDeps {
+  logger?: Logger;
+  metrics?: Metrics;
+}
+
 // ── ハンドラーファクトリ（DI 対応） ──────────────────────────
 
 /**
@@ -44,10 +72,21 @@ export const SNS_RETRY_CONFIG: RetryConfig = {
 export const createHandler = (
   sns: SNSClient = new SNSClient({}),
   retryOptions: RetryOptions = {},
+  deps: HandlerDeps = {},
 ) =>
   async (event: DynamoDBRecord[] | DynamoDBRecord): Promise<HandlerResult> => {
+    const logger = deps.logger ?? createLoggerFromEnv();
+    // メトリクスは 1 回の起動で 1 ドキュメントにまとめるため、呼び出しごとに作る
+    const metrics =
+      deps.metrics ??
+      createMetrics({
+        namespace: process.env['METRICS_NAMESPACE'] ?? DEFAULT_METRICS_NAMESPACE,
+        dimensions: { Handler: 'streams-alert' },
+      });
+
     const records: DynamoDBRecord[] = Array.isArray(event) ? event : [event];
-    console.log(`streams-alert handler 起動: ${records.length} レコード`);
+    logger.info('streams-alert handler 起動', { recordCount: records.length });
+    metrics.count('RecordsReceived', records.length);
 
     const processed: ProcessResult[] = [];
     const skipped: ProcessResult[] = [];
@@ -58,20 +97,28 @@ export const createHandler = (
       const newImage = record.dynamodb?.NewImage;
 
       if (!PROCESSABLE_EVENTS.has(eventName)) {
-        console.log(`eventName=${eventName} をスキップ（対象外）`);
+        logger.info('対象外イベントをスキップ', { eventName, reason: 'non-target event' });
+        metrics.count('RecordSkipped');
         skipped.push({ eventName, status: 'skipped', reason: 'non-target event' });
         continue;
       }
 
       if (!newImage || Object.keys(newImage).length === 0) {
-        console.warn(`NewImage が空のレコードをスキップ: eventName=${eventName}`);
+        logger.warn('NewImage が空のレコードをスキップ', { eventName, reason: 'empty NewImage' });
+        metrics.count('RecordSkipped');
         skipped.push({ eventName, status: 'skipped', reason: 'empty NewImage' });
         continue;
       }
 
       const incidentId = extractDynamoValue(newImage['incident_id']) || 'UNKNOWN';
       const severity = extractDynamoValue(newImage['severity']) || 'UNKNOWN';
+      // incidentId / severity を子ロガーに持たせて、以降のログすべてに載せる
+      const recordLogger = logger.child({ incidentId, severity });
 
+      const logRetry = retryLogger(recordLogger, RETRY_OPERATION);
+      const countRetry = retryMetrics(metrics, RETRY_OPERATION);
+
+      const stopTimer = metrics.timer('PublishLatency');
       try {
         const { subject, body } = buildMessage(newImage);
         // スロットリングや一時的な 5xx は指数バックオフで再試行する。
@@ -89,22 +136,32 @@ export const createHandler = (
             config: SNS_RETRY_CONFIG,
             ...retryOptions,
             onRetry: (attempt, delayMs, error) => {
-              console.warn(
-                `SNS 通知をリトライします: incident_id=${incidentId} attempt=${attempt} delayMs=${Math.round(delayMs)} error=${error}`,
-              );
+              logRetry(attempt, delayMs, error);
+              countRetry(attempt, delayMs, error);
               retryOptions.onRetry?.(attempt, delayMs, error);
             },
           },
         );
-        console.log(`SNS 通知成功: incident_id=${incidentId} severity=${severity} MessageId=${res.MessageId}`);
+        stopTimer();
+        recordLogger.info('SNS 通知成功', { messageId: res.MessageId });
+        metrics.count('NotificationSuccess');
         processed.push({ incident_id: incidentId, severity, status: 'success', message_id: res.MessageId });
       } catch (err) {
-        console.error(`SNS 通知エラー: incident_id=${incidentId} error=${err}`);
+        stopTimer();
+        recordLogger.error('SNS 通知エラー', { error: err });
+        metrics.count('NotificationError');
         errors.push({ incident_id: incidentId, severity, status: 'error', reason: String(err) });
       }
     }
 
-    console.log(`処理完了: 成功=${processed.length} / スキップ=${skipped.length} / エラー=${errors.length}`);
+    logger.info('処理完了', {
+      processed: processed.length,
+      skipped: skipped.length,
+      errors: errors.length,
+    });
+    // EMF は 1 行の JSON を標準出力に書くだけなので、ここでの失敗は本処理に影響しない
+    metrics.flush();
+
     return { processed, skipped, errors };
   };
 
