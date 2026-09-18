@@ -32,13 +32,41 @@ import os
 from typing import Any
 
 import boto3
+from botocore.config import Config
+from retry import RetryConfig, retry_call
 
 # ── ロガー設定 ─────────────────────────────────────────────────────────
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
+# ── リトライ設定 ──────────────────────────────────────────────────────
+# 同リポジトリの Go 版（lambda_go/guardduty-notifier/retry.go）および
+# TypeScript 版（lambda_ts/streams-alert/index.ts）の既定値と揃えてある。
+# 共通モジュール retry.py の既定値（0.5 秒 / 8 秒 / 3 回）より短いのは、
+# Streams のハンドラーが 1 回の起動で複数レコードを直列に処理するため、
+# 1 レコードあたりの待機がバッチ全体のタイムアウトに直接効いてくるから。
+SNS_RETRY_CONFIG = RetryConfig(
+    max_attempts=4,
+    base_delay=0.1,
+    max_delay=5.0,
+    jitter=True,
+)
+
 # ── クライアント初期化（コンテナ再利用で再生成しない） ────────────────
-sns = boto3.client("sns", region_name=os.environ.get("AWS_REGION", "ap-northeast-1"))
+# botocore の内蔵リトライは切っている。retry.py 側で再試行するため、
+# 両方を有効にすると試行回数が掛け算になり、待機時間が読めなくなる。
+# 併せて、リトライの発生を on_retry で記録できるようにする狙いもある
+# （botocore の内蔵リトライは発生を呼び出し側から観測できない）。
+#
+# ★ retries に max_attempts を使わないこと。botocore はこれを「リトライ回数」として
+#   解釈するため、max_attempts=1 は total_max_attempts=2（＝1 回リトライする）に
+#   正規化されてしまう。total_max_attempts で「初回を含む総試行回数」を明示する。
+_SNS_CONFIG = Config(retries={"total_max_attempts": 1, "mode": "standard"})
+sns = boto3.client(
+    "sns",
+    region_name=os.environ.get("AWS_REGION", "ap-northeast-1"),
+    config=_SNS_CONFIG,
+)
 SNS_TOPIC_ARN: str = os.environ["SNS_TOPIC_ARN"]
 
 # ── 重大度ラベル ──────────────────────────────────────────────────────
@@ -108,6 +136,26 @@ def _build_message(new_image: dict[str, Any]) -> tuple[str, str]:
     return subject, body
 
 
+def _make_retry_logger(incident_id: str) -> Any:
+    """
+    retry_call の on_retry に渡すコールバックを作る。
+
+    リトライは「起きていること自体は正常だが、頻発したら異常」という事象なので
+    warning で残し、あとから件数を数えられるようにする。
+    """
+
+    def _on_retry(attempt: int, delay: float, exc: BaseException) -> None:
+        logger.warning(
+            "SNS 通知をリトライします: incident_id=%s attempt=%d delay=%.2fs error=%s",
+            incident_id,
+            attempt,
+            delay,
+            exc,
+        )
+
+    return _on_retry
+
+
 # ── ハンドラー ────────────────────────────────────────────────────────
 
 
@@ -164,18 +212,22 @@ def handler(
             )
             continue
 
+        incident_id = _extract_dynamo_value(
+            new_image.get("incident_id", {"S": "UNKNOWN"})
+        )
+        severity = _extract_dynamo_value(new_image.get("severity", {"S": "UNKNOWN"}))
+
         try:
             subject, body = _build_message(new_image)
-            response = sns.publish(
+            # スロットリングや一時的な 5xx は指数バックオフで再試行する。
+            # 通知が 1 回の失敗で落ちると、検知が誰にも届かないまま終わる。
+            response = retry_call(
+                sns.publish,
                 TopicArn=SNS_TOPIC_ARN,
                 Subject=subject[:100],  # SNS 件名は 100 文字制限
                 Message=body,
-            )
-            incident_id = _extract_dynamo_value(
-                new_image.get("incident_id", {"S": "UNKNOWN"})
-            )
-            severity = _extract_dynamo_value(
-                new_image.get("severity", {"S": "UNKNOWN"})
+                config=SNS_RETRY_CONFIG,
+                on_retry=_make_retry_logger(incident_id),
             )
             logger.info(
                 "SNS 通知成功: incident_id=%s severity=%s MessageId=%s",
@@ -194,9 +246,19 @@ def handler(
 
         except Exception as e:  # noqa: BLE001
             logger.error(
-                "SNS 通知エラー: record=%s error=%s", json.dumps(record, default=str), e
+                "SNS 通知エラー: incident_id=%s record=%s error=%s",
+                incident_id,
+                json.dumps(record, default=str),
+                e,
             )
-            errors.append({"status": "error", "reason": str(e)})
+            errors.append(
+                {
+                    "incident_id": incident_id,
+                    "severity": severity,
+                    "status": "error",
+                    "reason": str(e),
+                }
+            )
 
     logger.info(
         "処理完了: 成功=%d / スキップ=%d / エラー=%d",
