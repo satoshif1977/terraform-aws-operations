@@ -195,6 +195,13 @@ type Retrier struct {
 	Config RetryConfig
 	Sleep  SleepFunc
 	Rand   func() float64
+	// OnRetry はリトライ直前に呼ばれるフック。
+	//
+	// logger.go の RetryLogHook() と metrics.go の RetryMetricsHook() が
+	// そのまま渡せるシグネチャにしてある（両者とも同じ型を返す）。
+	// nil の場合は従来どおり標準ログへ 1 行出力する。リトライが起きた事実を
+	// 黙って落とさないため、フック未設定でも出力自体は止めない。
+	OnRetry func(attempt int, delay time.Duration, err error)
 }
 
 // NewRetrier は既定の設定を持つ Retrier を返す。
@@ -228,8 +235,12 @@ func (r Retrier) Do(ctx context.Context, op string, fn func(context.Context) err
 		}
 
 		delay := ComputeDelay(attempt, cfg, r.Rand)
-		log.Printf("リトライします: op=%s attempt=%d/%d delay=%v err=%v",
-			op, attempt, cfg.MaxAttempts-1, delay, lastErr)
+		if r.OnRetry != nil {
+			r.OnRetry(attempt, delay, lastErr)
+		} else {
+			log.Printf("リトライします: op=%s attempt=%d/%d delay=%v err=%v",
+				op, attempt, cfg.MaxAttempts-1, delay, lastErr)
+		}
 
 		if err := sleep(ctx, delay); err != nil {
 			// 待機中に context がキャンセルされた。元のエラーを保ったまま理由を添える
