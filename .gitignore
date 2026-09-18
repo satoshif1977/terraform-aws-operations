@@ -20,3 +20,6 @@ lambda/**/*.zip
 # Node.js
 node_modules/
 dist/
+
+# テストカバレッジ出力
+coverage/
