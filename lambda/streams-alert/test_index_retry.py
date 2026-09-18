@@ -25,7 +25,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 from index import _SNS_CONFIG, SNS_RETRY_CONFIG, handler
 from logger import create_logger
 from metrics import create_metrics
-
 from retry import RetryConfig
 
 
