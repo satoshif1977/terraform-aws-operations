@@ -22,22 +22,32 @@ EventBridge Pipes + Lambda の event 形式:
       }
     }
   }]
+
+ログとメトリクスは同ディレクトリの logger.py / metrics.py に寄せてある。
+標準 logging を直接呼ばないのは、インシデントの本文がそのまま CloudWatch Logs に
+流れるため、logger.py のマスキング（is_sensitive_key）を必ず通したいから。
+同リポジトリの TypeScript 版（lambda_ts/streams-alert/index.ts）および
+Go 版（lambda_go/guardduty-notifier）と同じ結線で 3 言語を揃えてある。
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import os
 from typing import Any
 
 import boto3
 from botocore.config import Config
+from logger import StructuredLogger, create_logger_from_env, retry_logger
+from metrics import MetricsCollector, create_metrics_from_env, retry_metrics
 from retry import RetryConfig, retry_call
 
-# ── ロガー設定 ─────────────────────────────────────────────────────────
-logger = logging.getLogger()
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
+# ── メトリクス設定 ────────────────────────────────────────────────────
+# 名前空間は TypeScript 版（index.ts の DEFAULT_METRICS_NAMESPACE）と同じ値。
+# 3 言語のハンドラーを CloudWatch の同じダッシュボードで並べて見られるようにする。
+DEFAULT_METRICS_NAMESPACE = "TerraformAwsOperations/StreamsAlert"
+
+#: リトライのメトリクス・ログに載せる操作名（TypeScript 版と同じ値）
+RETRY_OPERATION = "sns:Publish"
 
 # ── リトライ設定 ──────────────────────────────────────────────────────
 # 同リポジトリの Go 版（lambda_go/guardduty-notifier/retry.go）および
@@ -136,24 +146,37 @@ def _build_message(new_image: dict[str, Any]) -> tuple[str, str]:
     return subject, body
 
 
-def _make_retry_logger(incident_id: str) -> Any:
+def _build_metrics() -> MetricsCollector:
+    """
+    このハンドラー用の MetricsCollector を組み立てる。
+
+    METRICS_NAMESPACE が未設定のときだけ、共通モジュールの既定値（Application）
+    ではなくこのハンドラーの名前空間を使う。METRICS_ENABLED の解釈は
+    共通モジュール側に任せて、無効化の条件を 1 か所に保つ。
+    """
+    env = dict(os.environ)
+    env["METRICS_NAMESPACE"] = env.get("METRICS_NAMESPACE") or DEFAULT_METRICS_NAMESPACE
+    return create_metrics_from_env(env, Handler="streams-alert")
+
+
+def _make_retry_hook(
+    log: StructuredLogger,
+    metrics: MetricsCollector,
+) -> Any:
     """
     retry_call の on_retry に渡すコールバックを作る。
 
-    リトライは「起きていること自体は正常だが、頻発したら異常」という事象なので
-    warning で残し、あとから件数を数えられるようにする。
+    ログとメトリクスの両方へ流す。リトライは「起きていること自体は正常だが、
+    頻発したら異常」という事象なので、warn でも残しつつ回数を数えられるようにする。
     """
+    log_retry = retry_logger(log, RETRY_OPERATION)
+    count_retry = retry_metrics(metrics, RETRY_OPERATION)
 
-    def _on_retry(attempt: int, delay: float, exc: BaseException) -> None:
-        logger.warning(
-            "SNS 通知をリトライします: incident_id=%s attempt=%d delay=%.2fs error=%s",
-            incident_id,
-            attempt,
-            delay,
-            exc,
-        )
+    def on_retry(attempt: int, delay: float, exc: BaseException) -> None:
+        log_retry(attempt, delay, exc)
+        count_retry(attempt, delay, exc)
 
-    return _on_retry
+    return on_retry
 
 
 # ── ハンドラー ────────────────────────────────────────────────────────
@@ -162,6 +185,9 @@ def _make_retry_logger(incident_id: str) -> Any:
 def handler(
     event: list[dict[str, Any]] | dict[str, Any],
     context: Any,
+    *,
+    logger: StructuredLogger | None = None,
+    metrics: MetricsCollector | None = None,
 ) -> dict[str, Any]:
     """
     EventBridge Pipes から DynamoDB Streams レコードを受け取り SNS へ通知する。
@@ -171,12 +197,19 @@ def handler(
     Args:
         event: Pipes から渡される DynamoDB Streams レコードのリスト（または単一 dict）
         context: Lambda コンテキスト
+        logger: 差し替え用のロガー（省略時は環境変数から組み立てる）
+        metrics: 差し替え用のメトリクス（省略時はこのハンドラーの名前空間で組み立てる）
 
     Returns:
         processed / skipped / errors を含む辞書
     """
+    log = logger or create_logger_from_env()
+    # メトリクスは 1 回の起動で 1 ドキュメントにまとめるため、呼び出しごとに作る
+    mx = metrics or _build_metrics()
+
     records = event if isinstance(event, list) else [event]
-    logger.info("streams-alert handler 起動: %d レコード", len(records))
+    log.info("streams-alert handler 起動", record_count=len(records))
+    mx.add_metric("RecordsReceived", len(records), unit="Count")
 
     processed: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
@@ -189,7 +222,12 @@ def handler(
 
         # INSERT / MODIFY のみ処理（REMOVE はスキップ）
         if event_name not in PROCESSABLE_EVENTS:
-            logger.info("eventName=%s をスキップ（対象外）", event_name)
+            log.info(
+                "対象外イベントをスキップ",
+                event_name=event_name,
+                reason="non-target event",
+            )
+            mx.add_metric("RecordSkipped", 1, unit="Count")
             skipped.append(
                 {
                     "eventName": event_name,
@@ -200,9 +238,12 @@ def handler(
             continue
 
         if not new_image:
-            logger.warning(
-                "NewImage が空のレコードをスキップ: eventName=%s", event_name
+            log.warn(
+                "NewImage が空のレコードをスキップ",
+                event_name=event_name,
+                reason="empty NewImage",
             )
+            mx.add_metric("RecordSkipped", 1, unit="Count")
             skipped.append(
                 {
                     "eventName": event_name,
@@ -216,25 +257,24 @@ def handler(
             new_image.get("incident_id", {"S": "UNKNOWN"})
         )
         severity = _extract_dynamo_value(new_image.get("severity", {"S": "UNKNOWN"}))
+        # incident_id / severity を子ロガーに持たせて、以降のログすべてに載せる
+        record_log = log.child(incident_id=incident_id, severity=severity)
 
         try:
             subject, body = _build_message(new_image)
             # スロットリングや一時的な 5xx は指数バックオフで再試行する。
             # 通知が 1 回の失敗で落ちると、検知が誰にも届かないまま終わる。
-            response = retry_call(
-                sns.publish,
-                TopicArn=SNS_TOPIC_ARN,
-                Subject=subject[:100],  # SNS 件名は 100 文字制限
-                Message=body,
-                config=SNS_RETRY_CONFIG,
-                on_retry=_make_retry_logger(incident_id),
-            )
-            logger.info(
-                "SNS 通知成功: incident_id=%s severity=%s MessageId=%s",
-                incident_id,
-                severity,
-                response.get("MessageId"),
-            )
+            with mx.timer("PublishLatency"):
+                response = retry_call(
+                    sns.publish,
+                    TopicArn=SNS_TOPIC_ARN,
+                    Subject=subject[:100],  # SNS 件名は 100 文字制限
+                    Message=body,
+                    config=SNS_RETRY_CONFIG,
+                    on_retry=_make_retry_hook(record_log, mx),
+                )
+            record_log.info("SNS 通知成功", message_id=response.get("MessageId"))
+            mx.add_metric("NotificationSuccess", 1, unit="Count")
             processed.append(
                 {
                     "incident_id": incident_id,
@@ -245,12 +285,11 @@ def handler(
             )
 
         except Exception as e:  # noqa: BLE001
-            logger.error(
-                "SNS 通知エラー: incident_id=%s record=%s error=%s",
-                incident_id,
-                json.dumps(record, default=str),
-                e,
-            )
+            # 例外はそのまま渡す。logger 側が type / message / stack にだけ展開するため、
+            # AWS SDK の例外が抱えている署名ヘッダーなどの付帯情報はログに出ない。
+            # レコード全体を出さないのも同じ理由（本文は SNS へ送る中身そのもの）。
+            record_log.error("SNS 通知エラー", error=e)
+            mx.add_metric("NotificationError", 1, unit="Count")
             errors.append(
                 {
                     "incident_id": incident_id,
@@ -260,10 +299,13 @@ def handler(
                 }
             )
 
-    logger.info(
-        "処理完了: 成功=%d / スキップ=%d / エラー=%d",
-        len(processed),
-        len(skipped),
-        len(errors),
+    log.info(
+        "処理完了",
+        processed=len(processed),
+        skipped=len(skipped),
+        errors=len(errors),
     )
+    # EMF は 1 行の JSON を標準出力に書くだけなので、ここでの失敗は本処理に影響しない
+    mx.flush()
+
     return {"processed": processed, "skipped": skipped, "errors": errors}

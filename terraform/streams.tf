@@ -178,12 +178,31 @@ resource "aws_cloudwatch_log_group" "streams_alert" {
 # ── 5. アラート Lambda 関数 ──────────────────────────────────────────
 
 # Lambda デプロイパッケージ（Python ソースを ZIP 化）
+#
+# ★ source_file は 1 ファイルしか ZIP に入らない。index.py が同ディレクトリの
+#   モジュールを import するようになったため、同梱するファイルを明示して並べる。
+#   source_dir を使わないのは test_*.py や __pycache__ まで同梱されてしまうため
+#   （デプロイパッケージは小さいほどコールドスタートが速い）。
+#   ここに足し忘れると、実行時に ModuleNotFoundError で初期化から落ちる。
 data "archive_file" "streams_alert" {
   count = var.streams_pipe_enabled ? 1 : 0
 
   type        = "zip"
-  source_file = "${path.module}/../lambda/streams-alert/index.py"
   output_path = "${path.module}/../lambda/streams-alert/index.zip"
+
+  dynamic "source" {
+    for_each = toset([
+      "index.py",   # ハンドラー本体
+      "retry.py",   # 指数バックオフ + フルジッター
+      "logger.py",  # 構造化ログ（機密キーのマスキング付き）
+      "metrics.py", # CloudWatch EMF メトリクス
+    ])
+
+    content {
+      content  = file("${path.module}/../lambda/streams-alert/${source.value}")
+      filename = source.value
+    }
+  }
 }
 
 resource "aws_lambda_function" "streams_alert" {

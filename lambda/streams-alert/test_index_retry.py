@@ -9,7 +9,7 @@ base_delay = max_delay かつ jitter 無効にすると待機時間が一定に�
 テストが決定的になる。
 """
 
-import logging
+import json
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -23,7 +23,24 @@ os.environ.setdefault(
 sys.path.insert(0, os.path.dirname(__file__))
 
 from index import _SNS_CONFIG, SNS_RETRY_CONFIG, handler
+from logger import create_logger
+from metrics import create_metrics
+
 from retry import RetryConfig
+
+
+def _collecting_logger(lines: list[dict]):
+    """出力された 1 行 JSON をそのまま集めるロガー。"""
+    return create_logger(
+        level="debug",
+        sink=lambda line, level: lines.append(json.loads(line)),
+    )
+
+
+def _silent_metrics():
+    """EMF をテスト出力に混ぜないための捨て先。"""
+    return create_metrics("Test", sink=lambda line: None, Handler="streams-alert")
+
 
 # 実待機ゼロ・待機時間一定の設定（試行回数だけ本番と揃える）
 _FAST = RetryConfig(
@@ -179,29 +196,41 @@ class TestNonRetryable:
 class TestOnRetry:
     @patch("index.SNS_RETRY_CONFIG", _FAST)
     @patch("index.sns")
-    def test_リトライのたびにwarningログが出る(self, mock_sns, caplog):
+    def test_リトライのたびにwarningログが出る(self, mock_sns):
         mock_sns.publish.side_effect = [_throttling(), {"MessageId": "msg-004"}]
+        lines: list[dict] = []
 
-        with caplog.at_level(logging.WARNING):
-            handler([_make_record(incident_id="inc-777")], MagicMock())
+        handler(
+            [_make_record(incident_id="inc-777")],
+            MagicMock(),
+            logger=_collecting_logger(lines),
+            metrics=_silent_metrics(),
+        )
 
-        warnings = [
-            r for r in caplog.records if "SNS 通知をリトライします" in r.getMessage()
-        ]
+        warnings = [e for e in lines if e["level"] == "warn"]
         assert len(warnings) == 1
-        assert "inc-777" in warnings[0].getMessage()
+        # 操作名とインシデント ID が構造化フィールドとして載る
+        # （文字列に埋め込まないので Logs Insights でそのまま集計できる）
+        assert warnings[0]["operation"] == "sns:Publish"
+        assert warnings[0]["incident_id"] == "inc-777"
+        assert warnings[0]["attempt"] == 1
 
     @patch("index.SNS_RETRY_CONFIG", _FAST)
     @patch("index.sns")
-    def test_リトライ対象外ならwarningは出ない(self, mock_sns, caplog):
+    def test_リトライ対象外ならwarningは出ない(self, mock_sns):
         mock_sns.publish.side_effect = Exception("plain")
+        lines: list[dict] = []
 
-        with caplog.at_level(logging.WARNING):
-            handler([_make_record()], MagicMock())
+        handler(
+            [_make_record()],
+            MagicMock(),
+            logger=_collecting_logger(lines),
+            metrics=_silent_metrics(),
+        )
 
-        assert not [
-            r for r in caplog.records if "SNS 通知をリトライします" in r.getMessage()
-        ]
+        assert not [e for e in lines if e["level"] == "warn"]
+        # リトライしないだけで、失敗そのものは error として残る
+        assert [e for e in lines if e["level"] == "error"]
 
 
 # ── 複数レコード ──────────────────────────────────────────────────────
