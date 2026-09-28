@@ -5,7 +5,7 @@ EventBridge 経由で受け取った GuardDuty Finding を整形して SNS へ�
 アーキテクチャ:
   GuardDuty → EventBridge Rule (severity >= 4.0) → Lambda → SNS → Email
 
-ログとメトリクスは同ディレクトリの logger.py / metrics.py に寄せてある。
+入力検証は validators.py、ログとメトリクスは logger.py / metrics.py に寄せてある。
 標準 logging を直接呼ばないのは、Finding の description に調査対象のホスト名や
 IP がそのまま入るため、logger.py のマスキング（is_sensitive_key）を必ず
 通したいから。同リポジトリの streams-alert（lambda/streams-alert/index.py）
@@ -22,6 +22,7 @@ from botocore.config import Config
 from logger import StructuredLogger, create_logger_from_env, retry_logger
 from metrics import MetricsCollector, create_metrics_from_env, retry_metrics
 from retry import RetryConfig, retry_call
+from validators import has_errors, validate_guardduty_event
 
 # ── メトリクス設定 ────────────────────────────────────────────────────
 # 名前空間は streams-alert（TerraformAwsOperations/StreamsAlert）と同じ形に揃える。
@@ -204,6 +205,43 @@ def lambda_handler(
         mx.add_metric("FindingSkipped", 1, unit="Count")
         mx.flush()
         return {"statusCode": 400, "body": "Empty detail"}
+
+    # ── 入力検証 ─────────────────────────────────────────────
+    # validators.py は AWS SDK に依存しない純粋関数なので、SNS を叩く前にここで弾く。
+    # とくに severity が数値でない Finding は、この直後の get_severity_label が
+    # float 比較で TypeError を投げてハンドラーごと落ちる。落ちると EventBridge が
+    # 再試行するが、イベントの中身が変わらない以上は何度やっても同じなので、
+    # 400 を返して再試行を止めたほうが無駄な起動を増やさずに済む。
+    #
+    # ログに載せるのは「どのフィールドが落ちたか」だけにする。format_errors は
+    # accountId の実値などをメッセージへ埋め込むため、そのまま出すと
+    # logger.py のマスキングを迂回してしまう。
+    validation_errors = validate_guardduty_event(event)
+    if has_errors(validation_errors):
+        log.warn(
+            "検証エラーのイベントをスキップ",
+            reason="validation failed",
+            invalid_fields=sorted(
+                {e.field for e in validation_errors if e.severity == "error"}
+            ),
+        )
+        mx.add_metric("FindingInvalid", 1, unit="Count")
+        mx.flush()
+        return {"statusCode": 400, "body": "Invalid event"}
+
+    validation_warnings = [e for e in validation_errors if e.severity == "warning"]
+    if validation_warnings:
+        # 警告では止めない。推奨フィールドの欠落や未知のリージョンは通知内容が
+        # 多少痩せるだけで、検知そのものを握りつぶすほうが損失が大きい。
+        # 件数をメトリクスに出しておけば、増えてきたときに気づける。
+        log.warn(
+            "検証警告あり（通知は継続）",
+            reason="validation warning",
+            warning_fields=sorted({e.field for e in validation_warnings}),
+        )
+        mx.add_metric(
+            "FindingValidationWarning", len(validation_warnings), unit="Count"
+        )
 
     severity: float = detail.get("severity", 0.0)
     severity_label = get_severity_label(severity)
