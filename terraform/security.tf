@@ -77,10 +77,28 @@ resource "aws_iam_role_policy" "guardduty_notifier_sns" {
 }
 
 # Lambda デプロイパッケージ（Python ソースを ZIP 化）
+#
+# source_dir + excludes ではなく、同梱するファイルを列挙する許可リスト方式にしている。
+#   - denylist だと test_*.py や __pycache__ が黙って混入する
+#     （デプロイパッケージは小さいほどコールドスタートが速い）。
+#   - ここに足し忘れると、実行時に ModuleNotFoundError で初期化から落ちる。
 data "archive_file" "guardduty_notifier" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/guardduty-notifier/index.py"
   output_path = "${path.module}/../lambda/guardduty-notifier/index.zip"
+
+  dynamic "source" {
+    for_each = toset([
+      "index.py",   # ハンドラー本体
+      "retry.py",   # 指数バックオフ + フルジッター
+      "logger.py",  # 構造化ログ（機密キーのマスキング付き）
+      "metrics.py", # CloudWatch EMF メトリクス
+    ])
+
+    content {
+      content  = file("${path.module}/../lambda/guardduty-notifier/${source.value}")
+      filename = source.value
+    }
+  }
 }
 
 resource "aws_cloudwatch_log_group" "guardduty_notifier" {
