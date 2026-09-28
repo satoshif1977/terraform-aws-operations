@@ -88,10 +88,11 @@ data "archive_file" "guardduty_notifier" {
 
   dynamic "source" {
     for_each = toset([
-      "index.py",   # ハンドラー本体
-      "retry.py",   # 指数バックオフ + フルジッター
-      "logger.py",  # 構造化ログ（機密キーのマスキング付き）
-      "metrics.py", # CloudWatch EMF メトリクス
+      "index.py",      # ハンドラー本体
+      "retry.py",      # 指数バックオフ + フルジッター
+      "logger.py",     # 構造化ログ（機密キーのマスキング付き）
+      "metrics.py",    # CloudWatch EMF メトリクス
+      "validators.py", # EventBridge / Finding の入力検証
     ])
 
     content {
